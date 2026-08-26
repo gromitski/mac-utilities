@@ -26,8 +26,11 @@ clean screenshots
 # 3. Clean only Downloads
 clean downloads
 
-# 4. Clean URL tracking parameters from clipboard (utm_*, fbclid, si, ref, etc.)
+# 4. Clean URL tracking parameters from clipboard (or direct argument)
 clean url
+# or pass a link directly:
+clean url "https://blah.com/?a=1&b=2&utm_source=qwaksdb"
+clean "https://blah.com/?a=1&b=2&utm_source=qwaksdb"
 
 # 5. Deep Cleanup (Safe Homebrew, npm, pip & developer caches)
 clean --deep
@@ -42,6 +45,21 @@ clean -n
 # 7. Detailed verbose output
 clean -v
 ```
+
+---
+
+## 🔗 URL Cleaning Details (`clean url`)
+
+Surgically removes analytics and ad-tech tracking parameters while **safely preserving functional query parameters** (search queries, page numbers, video IDs/timestamps).
+
+* **What is stripped:**
+  * **Google / Analytics:** `utm_source`, `utm_medium`, `utm_campaign`, `utm_term`, `utm_content`, `utm_id`, `utm_*`, `gclid`, `gclsrc`, `dclid`, `_ga`, `_gl`
+  * **Meta / Social:** `fbclid`, `igshid`, `twclid`, `ref_src`, `li_fat_id`, `msclkid`, `tt_medium`
+  * **Media & Sharing:** YouTube `si`, `feature`, `pp` (preserves video `v` and timestamp `t`); Spotify `si`, `nd`
+  * **Amazon Clutter:** `ref`, `ref_`, `tag`, `keywords`, `qid`, `sr`, `crid`, `sprefix`, `dib`, `pd_rd_*` (normalizes to clean `/dp/ASIN`)
+  * **Email & Newsletters:** `_hsenc`, `_hsmi` (HubSpot), `mc_eid` (Mailchimp), `mkt_tok` (Marketo), Substack `r`
+* **Example:**
+  `https://blah.com/?a=1&b=2&utm_source=qwaksdb` ➔ `https://blah.com/?a=1&b=2`
 
 ---
 
