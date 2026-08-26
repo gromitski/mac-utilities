@@ -220,9 +220,13 @@ def generate_qr_matrix(text: str):
 
 
 def render_terminal_qr(url: str) -> str:
-    """Render a crisp, high-contrast QR code for dark terminal windows."""
+    """
+    Render a seamless, high-contrast QR code.
+    Uses full double-space background colors (\033[47m White / \033[40m Black)
+    to completely eliminate line-height / leading gaps in terminal fonts.
+    """
     matrix = generate_qr_matrix(url)
-    border = 2
+    border = 3
     full_matrix = []
     width = len(matrix) + border * 2
     for _ in range(border):
@@ -232,21 +236,12 @@ def render_terminal_qr(url: str) -> str:
     for _ in range(border):
         full_matrix.append([False] * width)
 
+    WHITE_CELL = "\033[47m  \033[0m"
+    BLACK_CELL = "\033[40m  \033[0m"
+
     lines = []
-    for r in range(0, len(full_matrix), 2):
-        line = "  \033[47m\033[30m"
-        for c in range(len(full_matrix[0])):
-            top = full_matrix[r][c]
-            bot = full_matrix[r + 1][c] if r + 1 < len(full_matrix) else False
-            if top and bot:
-                line += " "
-            elif top and not bot:
-                line += "▀"
-            elif not top and bot:
-                line += "▄"
-            else:
-                line += "█"
-        line += "\033[0m"
+    for row in full_matrix:
+        line = "  " + "".join(BLACK_CELL if cell else WHITE_CELL for cell in row)
         lines.append(line)
     return "\n".join(lines)
 
