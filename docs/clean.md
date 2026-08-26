@@ -61,3 +61,26 @@ Add `~/utilities/scripts` to your `$PATH` in `~/.zshrc`:
 echo 'export PATH="$HOME/utilities/scripts:$PATH"' >> ~/.zshrc
 source ~/.zshrc
 ```
+
+---
+
+## 🛠 Troubleshooting: macOS Privacy & Permissions (`Operation not permitted`)
+
+macOS restricts access to protected folders (`~/Downloads`, `~/Documents`, `~/Desktop`) via Transparency, Consent, and Control (TCC).
+
+If running `clean` reports `[Permission Error] macOS blocked access to '~/Downloads'`:
+
+1. **Quick Fix via Terminal (Recommended):**
+   Reset the permission cache so macOS prompts you fresh:
+   ```bash
+   # Reset Terminal permissions for Downloads folder
+   tccutil reset SystemPolicyDownloadsFolder com.apple.Terminal
+   
+   # Or reset all Terminal permissions
+   tccutil reset All com.apple.Terminal
+   ```
+   Then re-run `clean` and click **Allow** when the macOS prompt appears.
+
+2. **Manual System Settings Check:**
+   * Go to **System Settings > Privacy & Security > Files and Folders** (or **Full Disk Access**).
+   * Ensure **Terminal** and **Alfred** have permission toggled ON for the **Downloads Folder**.

@@ -49,3 +49,15 @@ The script is scheduled via a native macOS LaunchAgent:
 cp ~/utilities/launchd/com.gromitski.downloads-housekeeping.plist ~/Library/LaunchAgents/
 launchctl load ~/Library/LaunchAgents/com.gromitski.downloads-housekeeping.plist
 ```
+
+---
+
+## 🛠 Troubleshooting: macOS Privacy & Permissions (`Operation not permitted`)
+
+If the script encounters `PermissionError: [Errno 1] Operation not permitted: '~/Downloads'`:
+
+```bash
+# Reset permission cache so macOS prompts you fresh:
+tccutil reset SystemPolicyDownloadsFolder com.apple.Terminal
+```
+Then re-run the command and click **Allow** on the macOS system dialog.

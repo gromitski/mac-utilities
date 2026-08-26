@@ -38,6 +38,9 @@ launchctl load ~/Library/LaunchAgents/com.gromitski.downloads-housekeeping.plist
 open ~/utilities/alfred/Clean.alfredworkflow
 ```
 
+> **Note on Permissions:** If macOS ever blocks terminal access to Downloads (`Operation not permitted`), reset the permission cache by running:  
+> `tccutil reset SystemPolicyDownloadsFolder com.apple.Terminal` and click **Allow**.
+
 ---
 
 ## ➕ Adding New Utilities
