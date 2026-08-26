@@ -1,0 +1,324 @@
+#!/usr/bin/env python3
+"""
+git-audit: Fast Multi-Repository Status & Sync Scanner
+------------------------------------------------------
+Scans all Git repositories across your workspace, reporting:
+- Branch & uncommitted changes (modified, untracked, staged)
+- Remote synchronization (unpushed commits, unpulled commits)
+- Stashes and last commit time
+
+Usage:
+  git-audit              Scan all standard project directories
+  git-audit -d           Show only repos needing attention (uncommitted / unpushed)
+  git-audit -v           Verbose: show list of modified files & unpushed commit titles
+  git-audit <path>       Scan a specific directory or single repo
+  git-audit --alfred     Output Alfred 5 Script Filter JSON
+"""
+
+import argparse
+import concurrent.futures
+import json
+import os
+import subprocess
+import sys
+
+DEFAULT_SEARCH_PATHS = [
+    os.path.expanduser("~/Projects"),
+    os.path.expanduser("~/projects"),
+    os.path.expanduser("~/utilities"),
+    os.path.expanduser("~/Documents"),
+    os.path.expanduser("~/Code"),
+    os.path.expanduser("~/Developer"),
+]
+
+IGNORED_DIRS = {
+    "node_modules", ".cache", ".venv", "venv", ".npm", ".nvm",
+    "Library", ".Trash", ".gemini", ".antigravity", "Pods",
+    ".codex", "dist", "build", ".next", ".dbt", ".git"
+}
+
+# ANSI Color Codes
+BOLD = "\033[1m"
+GREEN = "\033[32m"
+YELLOW = "\033[33m"
+BLUE = "\033[34m"
+MAGENTA = "\033[35m"
+CYAN = "\033[36m"
+RED = "\033[31m"
+GRAY = "\033[90m"
+RESET = "\033[0m"
+
+
+def run_git_cmd(repo_path: str, args: list) -> str:
+    """Execute a git command inside a repo and return trimmed stdout."""
+    cmd = ["git", "-C", repo_path] + args
+    res = subprocess.run(cmd, capture_output=True, text=True)
+    return res.stdout.strip()
+
+
+def find_git_repos(search_paths: list) -> list:
+    """Recursively search for Git repository root directories, deduplicating paths."""
+    repos = []
+    seen = set()
+
+    for base in search_paths:
+        base = os.path.abspath(os.path.expanduser(base))
+        if not os.path.exists(base):
+            continue
+
+        real_base = os.path.realpath(base).lower()
+        if real_base in seen:
+            continue
+
+        if os.path.exists(os.path.join(base, ".git")):
+            repos.append(base)
+            seen.add(real_base)
+            continue
+
+        for root, dirs, _ in os.walk(base, topdown=True):
+            real_root = os.path.realpath(root).lower()
+            if ".git" in dirs or os.path.exists(os.path.join(root, ".git")):
+                if real_root not in seen:
+                    repos.append(root)
+                    seen.add(real_root)
+                dirs[:] = []
+                continue
+
+            dirs[:] = [d for d in dirs if d not in IGNORED_DIRS and not d.startswith(".")]
+
+    return sorted(repos)
+
+
+def inspect_repo(repo_path: str) -> dict:
+    """Inspect the status and sync metrics of a single Git repository."""
+    branch = run_git_cmd(repo_path, ["branch", "--show-current"])
+    if not branch:
+        commit_hash = run_git_cmd(repo_path, ["rev-parse", "--short", "HEAD"])
+        branch = f"HEAD ({commit_hash})" if commit_hash else "empty"
+
+    # Status parsing
+    status_output = run_git_cmd(repo_path, ["status", "--porcelain"])
+    status_lines = [l for l in status_output.splitlines() if l.strip()]
+    untracked_count = sum(1 for l in status_lines if l.startswith("??"))
+    modified_count = len(status_lines) - untracked_count
+
+    # Remote tracking & commit counts
+    upstream = run_git_cmd(repo_path, ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"])
+    has_remotes = bool(run_git_cmd(repo_path, ["remote"]))
+
+    ahead = 0
+    behind = 0
+    has_upstream = bool(upstream)
+
+    if has_upstream:
+        ahead_str = run_git_cmd(repo_path, ["rev-list", "--count", "@{u}..HEAD"])
+        behind_str = run_git_cmd(repo_path, ["rev-list", "--count", "HEAD..@{u}"])
+        ahead = int(ahead_str) if ahead_str.isdigit() else 0
+        behind = int(behind_str) if behind_str.isdigit() else 0
+
+    # Stash count & last commit time
+    stash_output = run_git_cmd(repo_path, ["stash", "list"])
+    stash_count = len([l for l in stash_output.splitlines() if l.strip()])
+    last_commit_time = run_git_cmd(repo_path, ["log", "-1", "--format=%cr"]) or "no commits"
+
+    # Verbose details
+    unpushed_commits = []
+    if ahead > 0:
+        unpushed_lines = run_git_cmd(repo_path, ["log", "--oneline", f"@{{u}}..HEAD"])
+        unpushed_commits = [l.strip() for l in unpushed_lines.splitlines() if l.strip()]
+
+    return {
+        "path": repo_path,
+        "name": os.path.basename(repo_path),
+        "rel_path": os.path.relpath(repo_path, os.path.expanduser("~")),
+        "branch": branch,
+        "uncommitted_total": len(status_lines),
+        "modified_count": modified_count,
+        "untracked_count": untracked_count,
+        "status_lines": status_lines,
+        "has_upstream": has_upstream,
+        "has_remotes": has_remotes,
+        "upstream": upstream,
+        "ahead": ahead,
+        "behind": behind,
+        "stash_count": stash_count,
+        "last_commit_time": last_commit_time,
+        "unpushed_commits": unpushed_commits,
+        "is_clean": (len(status_lines) == 0 and ahead == 0 and behind == 0 and has_upstream),
+    }
+
+
+def output_alfred_json(repo_stats: list):
+    """Generate Alfred Script Filter items."""
+    items = []
+
+    for s in repo_stats:
+        badges = []
+        if s["uncommitted_total"] > 0:
+            badges.append(f"🟡 {s['uncommitted_total']} uncommitted")
+        if s["ahead"] > 0:
+            badges.append(f"⬆️ {s['ahead']} unpushed")
+        if s["behind"] > 0:
+            badges.append(f"⬇️ {s['behind']} behind")
+        if not s["has_upstream"]:
+            badges.append("⚠️ no upstream" if s["has_remotes"] else "local only")
+
+        if s["is_clean"]:
+            title = f"🟢 {s['name']} [{s['branch']}]"
+            subtitle = f"Clean & synced ({s['last_commit_time']}) • ~/{s['rel_path']}"
+        else:
+            title = f"⚠️ {s['name']} [{s['branch']}] — {', '.join(badges)}"
+            subtitle = f"~/{s['rel_path']} • Last commit: {s['last_commit_time']}"
+
+        items.append({
+            "uid": s["path"],
+            "title": title,
+            "subtitle": subtitle,
+            "arg": s["path"],
+            "autocomplete": s["name"],
+            "valid": True,
+        })
+
+    print(json.dumps({"items": items}, indent=2))
+    sys.exit(0)
+
+
+def print_cli_report(repo_stats: list, dirty_only: bool = False, verbose: bool = False):
+    """Format and print the audit dashboard table."""
+    total_repos = len(repo_stats)
+    clean_repos = sum(1 for s in repo_stats if s["is_clean"])
+    dirty_repos = total_repos - clean_repos
+
+    print(f"\n🔍 {BOLD}Git Repositories Audit{RESET} ({total_repos} repositories found)")
+    print(f"{GRAY}──────────────────────────────────────────────────────────────────────────────────────────{RESET}")
+    print(f"{BOLD}{'Repository':<35} {'Branch':<16} {'Status':<14} {'Sync':<16} {'Last Commit'}{RESET}")
+    print(f"{GRAY}──────────────────────────────────────────────────────────────────────────────────────────{RESET}")
+
+    displayed = 0
+    for s in repo_stats:
+        if dirty_only and s["is_clean"]:
+            continue
+
+        displayed += 1
+        name_display = f"~/{s['rel_path']}"
+        if len(name_display) > 33:
+            name_display = name_display[:30] + "..."
+
+        # Branch formatting
+        branch_str = s["branch"]
+        if len(branch_str) > 14:
+            branch_str = branch_str[:12] + ".."
+        branch_display = f"[{CYAN}{branch_str}{RESET}]"
+
+        # Status column (Working tree)
+        if s["uncommitted_total"] == 0:
+            status_str = f"{GREEN}clean{RESET}"
+        else:
+            parts = []
+            if s["modified_count"] > 0:
+                parts.append(f"{s['modified_count']}M")
+            if s["untracked_count"] > 0:
+                parts.append(f"{s['untracked_count']}?")
+            status_str = f"{YELLOW}{'+'.join(parts)} dirty{RESET}"
+
+        # Sync column (Remote status)
+        sync_parts = []
+        if s["ahead"] > 0:
+            sync_parts.append(f"{BLUE}↑{s['ahead']}{RESET}")
+        if s["behind"] > 0:
+            sync_parts.append(f"{MAGENTA}↓{s['behind']}{RESET}")
+
+        if sync_parts:
+            sync_str = " ".join(sync_parts)
+        elif not s["has_upstream"]:
+            sync_str = f"{GRAY}no upstream{RESET}" if s["has_remotes"] else f"{GRAY}local{RESET}"
+        else:
+            sync_str = f"{GREEN}synced{RESET}"
+
+        # Status badge indicator
+        if s["is_clean"]:
+            badge = f"{GREEN}●{RESET}"
+        elif s["uncommitted_total"] > 0 and (s["ahead"] > 0 or s["behind"] > 0):
+            badge = f"{RED}●{RESET}"
+        elif s["uncommitted_total"] > 0:
+            badge = f"{YELLOW}●{RESET}"
+        else:
+            badge = f"{BLUE}●{RESET}"
+
+        print(f"{badge} {name_display:<33} {branch_display:<25} {status_str:<23} {sync_str:<25} {GRAY}{s['last_commit_time']}{RESET}")
+
+        # Verbose output for dirty files and unpushed commits
+        if verbose and not s["is_clean"]:
+            if s["status_lines"]:
+                print(f"    {GRAY}Uncommitted files:{RESET}")
+                for line in s["status_lines"][:8]:
+                    print(f"      {YELLOW}{line}{RESET}")
+                if len(s["status_lines"]) > 8:
+                    print(f"      {GRAY}... and {len(s['status_lines']) - 8} more{RESET}")
+
+            if s["unpushed_commits"]:
+                print(f"    {GRAY}Unpushed commits ({s['ahead']}):{RESET}")
+                for c in s["unpushed_commits"][:5]:
+                    print(f"      {BLUE}↑ {c}{RESET}")
+            print()
+
+    print(f"{GRAY}──────────────────────────────────────────────────────────────────────────────────────────{RESET}")
+    print(f"Summary: {GREEN}{clean_repos} clean & synced{RESET} • {YELLOW if dirty_repos > 0 else GREEN}{dirty_repos} need attention{RESET}\n")
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="git-audit: Multi-repository status scanner for macOS",
+        usage="git-audit [path] [options]",
+    )
+    parser.add_argument(
+        "path",
+        nargs="?",
+        default=None,
+        help="Path to scan (defaults to standard project folders: ~/Projects, ~/utilities, ~/Documents)",
+    )
+    parser.add_argument(
+        "-d",
+        "--dirty-only",
+        action="store_true",
+        help="Only display repositories with uncommitted changes or unpushed commits",
+    )
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="Display detailed uncommitted files and unpushed commit lists",
+    )
+    parser.add_argument(
+        "--alfred",
+        action="store_true",
+        help="Output Alfred 5 Script Filter JSON",
+    )
+
+    args = parser.parse_args()
+
+    search_roots = [args.path] if args.path else DEFAULT_SEARCH_PATHS
+    repos = find_git_repos(search_roots)
+
+    if not repos:
+        if args.alfred:
+            print(json.dumps({"items": [{"title": "No Git repositories found", "subtitle": "Checked standard paths", "valid": False}]}))
+            return
+        print("\n🔍 No Git repositories found in search paths.\n")
+        return
+
+    # Concurrent inspection across all repositories
+    with concurrent.futures.ThreadPoolExecutor(max_workers=min(16, len(repos))) as executor:
+        results = list(executor.map(inspect_repo, repos))
+
+    # Sort results: dirty/unsynced first, then alphabetically by name
+    results.sort(key=lambda r: (r["is_clean"], r["rel_path"].lower()))
+
+    if args.alfred:
+        output_alfred_json(results)
+    else:
+        print_cli_report(results, dirty_only=args.dirty_only, verbose=args.verbose)
+
+
+if __name__ == "__main__":
+    main()

@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>bundleid</key>
-	<string>com.gromitski.clean-housekeeping</string>
+	<string>com.gromitski.mac-utilities</string>
 	<key>category</key>
 	<string>Productivity</string>
 	<key>connections</key>
@@ -21,15 +21,28 @@
 				<false/>
 			</dict>
 		</array>
+		<key>D46F5B2A-6A38-4C84-958C-5582AC5F710A</key>
+		<array>
+			<dict>
+				<key>destinationuid</key>
+				<string>E73A8B12-9A4B-4E38-892C-1123456789AB</string>
+				<key>modifiers</key>
+				<integer>0</integer>
+				<key>modifiersubtext</key>
+				<string></string>
+				<key>vitoclose</key>
+				<false/>
+			</dict>
+		</array>
 	</dict>
 	<key>createdby</key>
 	<string>Stu Collett</string>
 	<key>description</key>
-	<string>Organize screenshots and downloads with Alfred (clean, clean screenshots, clean downloads, clean --deep)</string>
+	<string>Mac Utilities: Clean Housekeeping &amp; Git Audit</string>
 	<key>disabled</key>
 	<false/>
 	<key>name</key>
-	<string>Clean Mac Housekeeping</string>
+	<string>Mac Utilities</string>
 	<key>objects</key>
 	<array>
 		<dict>
@@ -104,13 +117,83 @@
 			<key>version</key>
 			<integer>2</integer>
 		</dict>
+		<dict>
+			<key>config</key>
+			<dict>
+				<key>alfredfiltersresults</key>
+				<false/>
+				<key>alfredfiltersresultsmatchmode</key>
+				<integer>0</integer>
+				<key>argumenttreatemptyqueryasnil</key>
+				<false/>
+				<key>argumenttrimmode</key>
+				<integer>0</integer>
+				<key>argumenttype</key>
+				<integer>1</integer>
+				<key>escaping</key>
+				<integer>102</integer>
+				<key>keyword</key>
+				<string>git-audit</string>
+				<key>queuedelaycustom</key>
+				<integer>3</integer>
+				<key>queuedelayimmediatelyinitially</key>
+				<true/>
+				<key>queuedelaymode</key>
+				<integer>0</integer>
+				<key>queuemode</key>
+				<integer>1</integer>
+				<key>runningsubtext</key>
+				<string>Scanning repositories...</string>
+				<key>script</key>
+				<string>/Users/gromitski/utilities/scripts/git-audit --alfred "$1"</string>
+				<key>scriptargtype</key>
+				<integer>1</integer>
+				<key>scriptfile</key>
+				<string></string>
+				<key>subtext</key>
+				<string>Check status of all workspace Git repositories</string>
+				<key>title</key>
+				<string>Git Repositories Audit</string>
+				<key>type</key>
+				<integer>0</integer>
+				<key>withspace</key>
+				<true/>
+			</dict>
+			<key>type</key>
+			<string>alfred.workflow.input.scriptfilter</string>
+			<key>uid</key>
+			<string>D46F5B2A-6A38-4C84-958C-5582AC5F710A</string>
+			<key>version</key>
+			<integer>3</integer>
+		</dict>
+		<dict>
+			<key>config</key>
+			<dict>
+				<key>concurrently</key>
+				<false/>
+				<key>escaping</key>
+				<integer>102</integer>
+				<key>script</key>
+				<string>open -a Terminal "$1" || open "$1"</string>
+				<key>scriptargtype</key>
+				<integer>1</integer>
+				<key>scriptfile</key>
+				<string></string>
+				<key>type</key>
+				<integer>0</integer>
+			</dict>
+			<key>type</key>
+			<string>alfred.workflow.action.script</string>
+			<key>uid</key>
+			<string>E73A8B12-9A4B-4E38-892C-1123456789AB</string>
+			<key>version</key>
+			<integer>2</integer>
+		</dict>
 	</array>
 	<key>readme</key>
-	<string>Trigger on-demand Mac Housekeeping:
-- 'clean' (or 'clean all'): cleans Screenshots &amp; Downloads
-- 'clean screenshots': cleans only Screenshots
-- 'clean downloads': cleans only Downloads
-- 'clean --deep': runs deep cleanups</string>
+	<string>Mac Utilities Toolkit:
+- 'clean': Master on-demand cleaner
+- 'git-audit': Scan uncommitted changes and unpushed commits across all workspace repositories</string>
 	<key>uidata</key>
 	<dict>
 		<key>65B203E0-5EE3-42D0-9B2D-318FA29555C1</key>
@@ -127,8 +210,22 @@
 			<key>ypos</key>
 			<real>60</real>
 		</dict>
+		<key>D46F5B2A-6A38-4C84-958C-5582AC5F710A</key>
+		<dict>
+			<key>xpos</key>
+			<real>80</real>
+			<key>ypos</key>
+			<real>200</real>
+		</dict>
+		<key>E73A8B12-9A4B-4E38-892C-1123456789AB</key>
+		<dict>
+			<key>xpos</key>
+			<real>300</real>
+			<key>ypos</key>
+			<real>200</real>
+		</dict>
 	</dict>
 	<key>version</key>
-	<string>1.1.0</string>
+	<string>1.2.0</string>
 </dict>
 </plist>
