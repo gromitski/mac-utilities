@@ -16,14 +16,13 @@ import argparse
 import functools
 import http.server
 import os
-import shutil
 import socket
 import socketserver
 import subprocess
 import sys
 
 # -------------------------------------------------------------
-# Pure Python QR Code Generator (Zero External Dependencies)
+# ISO/IEC 18004 Standard QR Code Matrix Generator (Pure Python)
 # -------------------------------------------------------------
 EXP_TABLE = [0] * 512
 LOG_TABLE = [0] * 256
@@ -46,16 +45,19 @@ def _gmul(x, y):
         return 0
     return EXP_TABLE[LOG_TABLE[x] + LOG_TABLE[y]]
 
-def _rs_encode(data, ecc_len):
-    gen = [1]
-    for i in range(ecc_len):
+def _rs_poly(degree):
+    g = [1]
+    for i in range(degree):
         root = EXP_TABLE[i]
-        new_g = [0] * (len(gen) + 1)
-        for j, coeff in enumerate(gen):
+        new_g = [0] * (len(g) + 1)
+        for j, coeff in enumerate(g):
             new_g[j] ^= _gmul(coeff, root)
             new_g[j + 1] ^= coeff
-        gen = new_g
+        g = new_g
+    return g
 
+def _rs_encode(data, ecc_len):
+    gen = _rs_poly(ecc_len)
     res = list(data) + [0] * ecc_len
     for i in range(len(data)):
         coeff = res[i]
@@ -64,16 +66,17 @@ def _rs_encode(data, ecc_len):
                 res[i + j] ^= _gmul(gen[j], coeff)
     return res[len(data):]
 
+# Spec table for Medium ECC (Byte Mode): (data_codewords, ecc_len, num_blocks, alignment_coords)
 QR_SPECS = {
-    1: (14, 10, 1, []),
-    2: (26, 16, 1, [6, 18]),
-    3: (42, 26, 1, [6, 22]),
-    4: (62, 18, 2, [6, 26]),
-    5: (84, 24, 2, [6, 30]),
-    6: (106, 16, 4, [6, 34]),
+    1: (16, 10, 1, []),
+    2: (28, 16, 1, [6, 18]),
+    3: (44, 26, 1, [6, 22]),
+    4: (64, 18, 2, [6, 26]),
+    5: (86, 24, 2, [6, 30]),
+    6: (108, 16, 4, [6, 34]),
 }
 
-def generate_qr_matrix(text: str):
+def make_qr_matrix(text: str):
     data_bytes = text.encode("utf-8")
     data_len = len(data_bytes)
 
@@ -89,7 +92,8 @@ def generate_qr_matrix(text: str):
     cap, ecc_len, num_blocks, align_coords = QR_SPECS[version]
     size = 17 + 4 * version
 
-    bits = [0, 1, 0, 0]
+    # 1. Byte Mode Data Encoding
+    bits = [0, 1, 0, 0]  # Mode 4 (Byte)
     for i in range(7, -1, -1):
         bits.append((data_len >> i) & 1)
     for b in data_bytes:
@@ -115,6 +119,7 @@ def generate_qr_matrix(text: str):
             byte = (byte << 1) | bits[i + j]
         codewords.append(byte)
 
+    # 2. Error Correction Codewords
     block_size = cap // num_blocks
     blocks_data, blocks_ecc = [], []
     for b in range(num_blocks):
@@ -122,60 +127,74 @@ def generate_qr_matrix(text: str):
         blocks_data.append(d)
         blocks_ecc.append(_rs_encode(d, ecc_len))
 
-    final_sequence = []
+    interleaved = []
     for i in range(block_size):
         for b in range(num_blocks):
-            final_sequence.append(blocks_data[b][i])
+            interleaved.append(blocks_data[b][i])
     for i in range(ecc_len):
         for b in range(num_blocks):
-            final_sequence.append(blocks_ecc[b][i])
+            interleaved.append(blocks_ecc[b][i])
 
     final_bits = []
-    for byte in final_sequence:
+    for byte in interleaved:
         for i in range(7, -1, -1):
             final_bits.append((byte >> i) & 1)
 
+    # 3. Build Matrix
     matrix = [[None] * size for _ in range(size)]
     reserved = [[False] * size for _ in range(size)]
 
-    def set_finder(r, c):
-        for i in range(-1, 8):
-            for j in range(-1, 8):
-                ri, cj = r + i, c + j
-                if 0 <= ri < size and 0 <= cj < size:
-                    if (0 <= i <= 6 and (j in (0, 6) or i in (0, 6))) or (2 <= i <= 4 and 2 <= j <= 4):
-                        matrix[ri][cj] = True
+    # Finder Patterns (7x7 with separator)
+    FINDER = [
+        [1, 1, 1, 1, 1, 1, 1],
+        [1, 0, 0, 0, 0, 0, 1],
+        [1, 0, 1, 1, 1, 0, 1],
+        [1, 0, 1, 1, 1, 0, 1],
+        [1, 0, 1, 1, 1, 0, 1],
+        [1, 0, 0, 0, 0, 0, 1],
+        [1, 1, 1, 1, 1, 1, 1],
+    ]
+
+    def place_finder(top_r, left_c):
+        for r in range(-1, 8):
+            for c in range(-1, 8):
+                gr, gc = top_r + r, left_c + c
+                if 0 <= gr < size and 0 <= gc < size:
+                    if 0 <= r <= 6 and 0 <= c <= 6:
+                        matrix[gr][gc] = bool(FINDER[r][c])
                     else:
-                        matrix[ri][cj] = False
-                    reserved[ri][cj] = True
+                        matrix[gr][gc] = False  # White separator
+                    reserved[gr][gc] = True
 
-    set_finder(0, 0)
-    set_finder(0, size - 7)
-    set_finder(size - 7, 0)
+    place_finder(0, 0)
+    place_finder(0, size - 7)
+    place_finder(size - 7, 0)
 
+    # Timing Patterns
     for i in range(8, size - 8):
         matrix[6][i] = (i % 2 == 0)
         matrix[i][6] = (i % 2 == 0)
         reserved[6][i] = True
         reserved[i][6] = True
 
+    # Alignment Patterns
     if align_coords:
         for r in align_coords:
             for c in align_coords:
                 if reserved[r][c]:
                     continue
-                for i in range(-2, 3):
-                    for j in range(-2, 3):
-                        ri, cj = r + i, c + j
-                        if max(abs(i), abs(j)) in (0, 2):
-                            matrix[ri][cj] = True
-                        else:
-                            matrix[ri][cj] = False
-                        reserved[ri][cj] = True
+                for dr in range(-2, 3):
+                    for dc in range(-2, 3):
+                        gr, gc = r + dr, c + dc
+                        is_black = (max(abs(dr), abs(dc)) in (0, 2))
+                        matrix[gr][gc] = is_black
+                        reserved[gr][gc] = True
 
+    # Dark Module
     matrix[4 * version + 9][8] = True
     reserved[4 * version + 9][8] = True
 
+    # Reserve Format Information
     for i in range(9):
         reserved[8][i] = True
         reserved[i][8] = True
@@ -183,6 +202,7 @@ def generate_qr_matrix(text: str):
         reserved[8][size - 1 - i] = True
         reserved[size - 1 - i][8] = True
 
+    # 4. Place Data Bits with Mask 0 ((row + col) % 2 == 0)
     bit_idx = 0
     col = size - 1
     up = True
@@ -201,46 +221,42 @@ def generate_qr_matrix(text: str):
         up = not up
         col -= 2
 
-    format_bits = [1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0]
-    coords_tl = [
+    # 5. Format Info (Medium ECC, Mask 0 = 101010000010010)
+    fmt = [1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0]
+    tl_coords = [
         (8, 0), (8, 1), (8, 2), (8, 3), (8, 4), (8, 5), (8, 7), (8, 8),
         (7, 8), (5, 8), (4, 8), (3, 8), (2, 8), (1, 8), (0, 8)
     ]
-    for idx, (r, c) in enumerate(coords_tl):
-        matrix[r][c] = (format_bits[idx] == 1)
+    for idx, (r, c) in enumerate(tl_coords):
+        matrix[r][c] = (fmt[idx] == 1)
 
-    coords_tr = [(8, size - 1 - i) for i in range(8)]
-    coords_bl = [(size - 7 + i, 8) for i in range(7)]
-    for idx, (r, c) in enumerate(coords_tr):
-        matrix[r][c] = (format_bits[idx] == 1)
-    for idx, (r, c) in enumerate(coords_bl):
-        matrix[r][c] = (format_bits[8 + idx] == 1)
+    for i in range(8):
+        matrix[8][size - 1 - i] = (fmt[i] == 1)
+    for i in range(7):
+        matrix[size - 7 + i][8] = (fmt[8 + i] == 1)
 
     return matrix
 
 
 def render_terminal_qr(url: str) -> str:
-    """
-    Render a seamless, high-contrast QR code.
-    Uses full double-space background colors (\033[47m White / \033[40m Black)
-    to completely eliminate line-height / leading gaps in terminal fonts.
-    """
-    matrix = generate_qr_matrix(url)
+    """Render a seamless, high-contrast, camera-readable QR code."""
+    matrix = make_qr_matrix(url)
     border = 3
-    full_matrix = []
-    width = len(matrix) + border * 2
+    size = len(matrix)
+    width = size + border * 2
+    full = []
     for _ in range(border):
-        full_matrix.append([False] * width)
+        full.append([False] * width)
     for row in matrix:
-        full_matrix.append([False] * border + row + [False] * border)
+        full.append([False] * border + row + [False] * border)
     for _ in range(border):
-        full_matrix.append([False] * width)
+        full.append([False] * width)
 
     WHITE_CELL = "\033[47m  \033[0m"
     BLACK_CELL = "\033[40m  \033[0m"
 
     lines = []
-    for row in full_matrix:
+    for row in full:
         line = "  " + "".join(BLACK_CELL if cell else WHITE_CELL for cell in row)
         lines.append(line)
     return "\n".join(lines)
@@ -307,7 +323,7 @@ def main():
 
     target_dir = os.path.abspath(os.path.expanduser(target_dir))
     if not os.path.exists(target_dir):
-        print(f"\033[1;31mError:\033[0m Directory does not exist: {target_dir}")
+        print(f"\033[1;31mError:\033[0m Directory does not exist: {target_dir}", flush=True)
         sys.exit(1)
 
     port = port_arg if port_arg else find_free_port(8000)
@@ -335,7 +351,7 @@ def main():
         with ReuseTCPServer(("0.0.0.0", port), handler) as httpd:
             httpd.serve_forever()
     except KeyboardInterrupt:
-        print("\n\n🛑 \033[33mServer stopped.\033[0m\n")
+        print("\n\n🛑 \033[33mServer stopped.\033[0m\n", flush=True)
         sys.exit(0)
 
 
