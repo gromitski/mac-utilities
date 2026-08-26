@@ -97,10 +97,19 @@ def organize_downloads(
         print(f"Downloads directory does not exist: {downloads_dir}")
         return
 
+    try:
+        raw_items = os.listdir(downloads_dir)
+    except PermissionError:
+        print(
+            f"\n\033[1;31m[Permission Error]\033[0m macOS blocked access to '{downloads_dir}'.\n"
+            "Please allow Terminal (or Alfred) access in:\n"
+            "👉 System Settings > Privacy & Security > Files and Folders (or Full Disk Access).\n",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
     review_dir = os.path.join(downloads_dir, review_folder_name)
     today = datetime.date.today()
-    # 3-month boundary: Any month strictly before (current_month - 3)
-    # e.g., in August (08), active months are 08, 07, 06, 05 (within 90d). 04 and earlier are expired.
     cutoff_3_months = today - datetime.timedelta(days=archive_months * 30)
 
     print(f"=== Downloads Housekeeping ({datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}) ===")
@@ -124,33 +133,32 @@ def organize_downloads(
     moved_to_month_files = 0
     moved_to_month_dirs = 0
 
-    # Track dry run simulated month folders
     simulated_month_contents = {}
 
-    for item in os.listdir(downloads_dir):
+    for item in raw_items:
         if item.startswith(".") or item.lower() in PROTECTED_NAMES:
             continue
 
         item_path = os.path.join(downloads_dir, item)
-        mtime = datetime.datetime.fromtimestamp(os.path.getmtime(item_path)).date()
+        try:
+            mtime = datetime.datetime.fromtimestamp(os.path.getmtime(item_path)).date()
+        except OSError:
+            continue
         age_days = (today - mtime).days
 
         # Case A: Loose Files
         if os.path.isfile(item_path):
-            # 1. Old installer files -> Trash
             if is_installer(item) and age_days > installer_days:
                 if move_to_trash(item_path, dry_run=dry_run, verbose=verbose):
                     trashed_installers += 1
                 continue
 
-            # 2. Recent files (<= 14 days) -> Keep in root
             if age_days <= recent_days:
                 kept_recent_files += 1
                 if verbose:
                     print(f"Preserving in root (file): {item} (Age: {age_days}d)")
                 continue
 
-            # 3. Older files (> 14 days) -> Move to YYYY-MM folder
             month_folder_name = mtime.strftime("%Y-%m")
             month_folder_path = os.path.join(downloads_dir, month_folder_name)
             dest_file_path = os.path.join(month_folder_path, item)
@@ -173,24 +181,20 @@ def organize_downloads(
 
         # Case B: Directories / Unzipped folders
         elif os.path.isdir(item_path):
-            # Skip existing monthly archive folders (processed in Step 2)
             if MONTH_DIR_PATTERN.match(item):
                 continue
 
-            # Installer app bundles (e.g. logioptionsplus_installer.app)
             if is_installer(item) and age_days > installer_days:
                 if move_to_trash(item_path, dry_run=dry_run, verbose=verbose):
                     trashed_installers += 1
                 continue
 
-            # Recent unzipped folder (<= 14 days) -> Keep in root
             if age_days <= recent_days:
                 kept_recent_dirs += 1
                 if verbose:
                     print(f"Preserving in root (folder): {item}/ (Age: {age_days}d)")
                 continue
 
-            # Older unzipped folder (> 14 days) -> Move into YYYY-MM folder
             month_folder_name = mtime.strftime("%Y-%m")
             month_folder_path = os.path.join(downloads_dir, month_folder_name)
             dest_dir_path = os.path.join(month_folder_path, item)
@@ -221,9 +225,8 @@ def organize_downloads(
     files_trashed_from_archive = 0
     folders_moved_to_review = 0
 
-    # Collect all month folders to inspect (real or simulated)
     all_months = set(
-        [item for item in os.listdir(downloads_dir) if os.path.isdir(os.path.join(downloads_dir, item)) and MONTH_DIR_PATTERN.match(item)]
+        [item for item in raw_items if os.path.isdir(os.path.join(downloads_dir, item)) and MONTH_DIR_PATTERN.match(item)]
     )
     if dry_run:
         all_months.update(simulated_month_contents.keys())
@@ -243,7 +246,6 @@ def organize_downloads(
             print(f"--- Processing Expired Month: {item}/ (> 3 months old) ---")
 
             if dry_run:
-                # Process simulated contents
                 contents = simulated_month_contents.get(item, [])
                 for c_type, c_path in contents:
                     c_name = os.path.basename(c_path)
@@ -255,7 +257,6 @@ def organize_downloads(
                         files_trashed_from_archive += 1
                 print(f"[DRY-RUN] Would clean up month folder: {item}/\n")
             else:
-                # Process actual on-disk contents
                 if os.path.exists(item_path):
                     for sub_item in os.listdir(item_path):
                         if sub_item.startswith("."):
@@ -263,15 +264,12 @@ def organize_downloads(
                         sub_path = os.path.join(item_path, sub_item)
 
                         if os.path.isdir(sub_path):
-                            # Unzipped folder > 3 months -> Move to _review
                             if move_to_review(sub_path, review_dir=review_dir, dry_run=dry_run, verbose=verbose):
                                 folders_moved_to_review += 1
                         elif os.path.isfile(sub_path):
-                            # Loose file > 3 months -> Move to Trash
                             if move_to_trash(sub_path, dry_run=dry_run, verbose=verbose):
                                 files_trashed_from_archive += 1
 
-                    # Remove empty monthly folder
                     try:
                         os.rmdir(item_path)
                         if verbose:
