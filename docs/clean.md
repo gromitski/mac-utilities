@@ -7,7 +7,8 @@ The master on-demand runner that executes all housekeeping tasks across **Screen
 ## 🎯 Features
 
 * **Single Universal Command:** Type `clean` anywhere in Terminal or trigger via Alfred.
-* **Unified Report:** Runs both housekeeping utilities and presents a sleek status report.
+* **Instant Tidy:** Sweeps all loose screenshots into daily `YYYY-MM-DD/` folders and all loose downloads into monthly `YYYY-MM/` folders immediately.
+* **Unified Report:** Runs both housekeeping utilities in-process and presents a sleek status report.
 * **Granular Control:** Supports targeting only screenshots or only downloads.
 * **Dry-Run Mode:** Test actions beforehand with `-n` or `--dry-run`.
 * **Native Notifications:** Displays a macOS notification banner when triggered via Alfred or when `--notify` is passed.
@@ -73,11 +74,7 @@ If running `clean` reports `[Permission Error] macOS blocked access to '~/Downlo
 1. **Quick Fix via Terminal (Recommended):**
    Reset the permission cache so macOS prompts you fresh:
    ```bash
-   # Reset Terminal permissions for Downloads folder
    tccutil reset SystemPolicyDownloadsFolder com.apple.Terminal
-   
-   # Or reset all Terminal permissions
-   tccutil reset All com.apple.Terminal
    ```
    Then re-run `clean` and click **Allow** when the macOS prompt appears.
 

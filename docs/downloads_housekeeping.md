@@ -1,18 +1,18 @@
 # 📥 Downloads Housekeeping (`downloads_housekeeping.py`)
 
-Automatically manages `~/Downloads` to eliminate installer clutter, maintain monthly archives, and protect unzipped project folders.
+Automatically organizes `~/Downloads` into monthly archives, eliminates old installer clutter, and protects unzipped project folders.
 
 ---
 
 ## 🎯 How It Works
 
-1. **Recent Downloads Stay in Root:** Files and unzipped folders downloaded or created in the last **14 days** remain loose in `~/Downloads/`.
-2. **14-Day Installer Purge:** Old installer files (`.dmg`, `.pkg`, `.iso`, and `*_installer.app`) older than 14 days are automatically moved to the **macOS Trash** (`~/.Trash`).
-3. **3-Month Rolling Archives:** Loose files and unzipped folders between 15 and 90 days old are organized into monthly archive folders (`YYYY-MM/`).
+1. **Immediate Monthly Organization:** All loose files and unzipped directories in `~/Downloads/` are organized into their corresponding monthly archive folders (`YYYY-MM/`).
+2. **Seamless Appending:** If a monthly folder (e.g. `2026-08/`) already exists, new downloads are safely added into it without errors or conflicts.
+3. **14-Day Installer Purge:** Old installer files (`.dmg`, `.pkg`, `.iso`, and `*_installer.app`) older than 14 days are automatically moved to the **macOS Trash** (`~/.Trash`).
 4. **3-Month Expiry & Review Protection:**
    - When a monthly folder reaches > 3 months old, loose files inside are moved to the Trash.
    - Any **unzipped or custom project folders** inside expired months are moved safely to `~/Downloads/_review/` so you can manually review them rather than risking accidental deletion.
-5. **Protected Folders:** The `_review/` directory and active monthly folders are protected.
+5. **Protected Folders:** The `_review/` directory and active monthly folders are protected from being sorted or deleted.
 
 ---
 
@@ -28,7 +28,7 @@ python3 ~/utilities/scripts/downloads_housekeeping.py --dry-run
 python3 ~/utilities/scripts/downloads_housekeeping.py -v
 
 # Custom retention thresholds
-python3 ~/utilities/scripts/downloads_housekeeping.py --recent-days 7 --installers-days 7 --months 2
+python3 ~/utilities/scripts/downloads_housekeeping.py --installers-days 14 --months 3
 ```
 
 ---

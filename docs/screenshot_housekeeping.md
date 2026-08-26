@@ -1,15 +1,15 @@
 # 📸 Screenshot Housekeeping (`screenshot_housekeeping.py`)
 
-Automatically manages `~/Pictures/screenshots` to keep your workspace clean and organized.
+Automatically organizes `~/Pictures/screenshots` into daily date folders and manages retention.
 
 ---
 
 ## 🎯 How It Works
 
-1. **Today's Screenshots in Root:** Files matching today's date stay directly in `~/Pictures/screenshots/` so you have immediate access for drag-and-drop or uploading.
-2. **Daily Date Folders:** Loose screenshots and screen recordings from previous days are organized into date-stamped subfolders (`YYYY-MM-DD/`).
+1. **Immediate Day Folder Organization:** All loose screenshots and screen recordings in `~/Pictures/screenshots/` are organized into their corresponding date subfolders (`YYYY-MM-DD/`).
+2. **Seamless Appending:** If a day folder (e.g. `2026-08-26/`) already exists, new screenshots are safely added to it without errors or conflicts.
 3. **14-Day Retention & Safe Trash:** Day folders older than 14 days are safely moved to the **macOS Trash** (`~/.Trash`), providing a recovery window before permanent deletion.
-4. **Archive & Custom Folder Protection:** Any folder named `Archive` (or any custom folder that does not follow the `YYYY-MM-DD` date format) is strictly ignored and permanently protected from modification or deletion.
+4. **Archive & Custom Folder Protection:** Any folder named `Archive` (or any custom folder that does not follow the `YYYY-MM-DD` format) is strictly ignored and permanently protected from modification or deletion.
 
 ---
 
