@@ -1,0 +1,348 @@
+#!/usr/bin/env python3
+"""
+localserver: Local Wi-Fi HTTP Server with Terminal QR Code
+----------------------------------------------------------
+Spins up a lightweight HTTP server in the current directory and renders
+a scannable QR code directly in the terminal so you can browse files or
+test web apps on your phone/tablet in 1 second over local Wi-Fi.
+
+Usage:
+  localserver              Serve current folder on default port (8000 or next free)
+  localserver 3000         Serve on specific port
+  localserver /path/to/dir Serve a custom folder
+"""
+
+import argparse
+import functools
+import http.server
+import os
+import shutil
+import socket
+import socketserver
+import subprocess
+import sys
+
+# -------------------------------------------------------------
+# Pure Python QR Code Generator (Zero External Dependencies)
+# -------------------------------------------------------------
+EXP_TABLE = [0] * 512
+LOG_TABLE = [0] * 256
+
+def _init_gf256():
+    x = 1
+    for i in range(255):
+        EXP_TABLE[i] = x
+        EXP_TABLE[i + 255] = x
+        LOG_TABLE[x] = i
+        x <<= 1
+        if x & 0x100:
+            x ^= 0x11d
+    LOG_TABLE[0] = 0
+
+_init_gf256()
+
+def _gmul(x, y):
+    if x == 0 or y == 0:
+        return 0
+    return EXP_TABLE[LOG_TABLE[x] + LOG_TABLE[y]]
+
+def _rs_encode(data, ecc_len):
+    gen = [1]
+    for i in range(ecc_len):
+        root = EXP_TABLE[i]
+        new_g = [0] * (len(gen) + 1)
+        for j, coeff in enumerate(gen):
+            new_g[j] ^= _gmul(coeff, root)
+            new_g[j + 1] ^= coeff
+        gen = new_g
+
+    res = list(data) + [0] * ecc_len
+    for i in range(len(data)):
+        coeff = res[i]
+        if coeff != 0:
+            for j in range(len(gen)):
+                res[i + j] ^= _gmul(gen[j], coeff)
+    return res[len(data):]
+
+QR_SPECS = {
+    1: (14, 10, 1, []),
+    2: (26, 16, 1, [6, 18]),
+    3: (42, 26, 1, [6, 22]),
+    4: (62, 18, 2, [6, 26]),
+    5: (84, 24, 2, [6, 30]),
+    6: (106, 16, 4, [6, 34]),
+}
+
+def generate_qr_matrix(text: str):
+    data_bytes = text.encode("utf-8")
+    data_len = len(data_bytes)
+
+    version = 1
+    for v in sorted(QR_SPECS.keys()):
+        cap, ecc_len, num_blocks, align = QR_SPECS[v]
+        if data_len <= cap:
+            version = v
+            break
+    else:
+        version = 6
+
+    cap, ecc_len, num_blocks, align_coords = QR_SPECS[version]
+    size = 17 + 4 * version
+
+    bits = [0, 1, 0, 0]
+    for i in range(7, -1, -1):
+        bits.append((data_len >> i) & 1)
+    for b in data_bytes:
+        for i in range(7, -1, -1):
+            bits.append((b >> i) & 1)
+
+    bits.extend([0] * min(4, (cap * 8) - len(bits)))
+    while len(bits) % 8 != 0:
+        bits.append(0)
+
+    pad_bytes = [0xEC, 0x11]
+    pad_idx = 0
+    while len(bits) < cap * 8:
+        b = pad_bytes[pad_idx % 2]
+        for i in range(7, -1, -1):
+            bits.append((b >> i) & 1)
+        pad_idx += 1
+
+    codewords = []
+    for i in range(0, len(bits), 8):
+        byte = 0
+        for j in range(8):
+            byte = (byte << 1) | bits[i + j]
+        codewords.append(byte)
+
+    block_size = cap // num_blocks
+    blocks_data, blocks_ecc = [], []
+    for b in range(num_blocks):
+        d = codewords[b * block_size : (b + 1) * block_size]
+        blocks_data.append(d)
+        blocks_ecc.append(_rs_encode(d, ecc_len))
+
+    final_sequence = []
+    for i in range(block_size):
+        for b in range(num_blocks):
+            final_sequence.append(blocks_data[b][i])
+    for i in range(ecc_len):
+        for b in range(num_blocks):
+            final_sequence.append(blocks_ecc[b][i])
+
+    final_bits = []
+    for byte in final_sequence:
+        for i in range(7, -1, -1):
+            final_bits.append((byte >> i) & 1)
+
+    matrix = [[None] * size for _ in range(size)]
+    reserved = [[False] * size for _ in range(size)]
+
+    def set_finder(r, c):
+        for i in range(-1, 8):
+            for j in range(-1, 8):
+                ri, cj = r + i, c + j
+                if 0 <= ri < size and 0 <= cj < size:
+                    if (0 <= i <= 6 and (j in (0, 6) or i in (0, 6))) or (2 <= i <= 4 and 2 <= j <= 4):
+                        matrix[ri][cj] = True
+                    else:
+                        matrix[ri][cj] = False
+                    reserved[ri][cj] = True
+
+    set_finder(0, 0)
+    set_finder(0, size - 7)
+    set_finder(size - 7, 0)
+
+    for i in range(8, size - 8):
+        matrix[6][i] = (i % 2 == 0)
+        matrix[i][6] = (i % 2 == 0)
+        reserved[6][i] = True
+        reserved[i][6] = True
+
+    if align_coords:
+        for r in align_coords:
+            for c in align_coords:
+                if reserved[r][c]:
+                    continue
+                for i in range(-2, 3):
+                    for j in range(-2, 3):
+                        ri, cj = r + i, c + j
+                        if max(abs(i), abs(j)) in (0, 2):
+                            matrix[ri][cj] = True
+                        else:
+                            matrix[ri][cj] = False
+                        reserved[ri][cj] = True
+
+    matrix[4 * version + 9][8] = True
+    reserved[4 * version + 9][8] = True
+
+    for i in range(9):
+        reserved[8][i] = True
+        reserved[i][8] = True
+    for i in range(8):
+        reserved[8][size - 1 - i] = True
+        reserved[size - 1 - i][8] = True
+
+    bit_idx = 0
+    col = size - 1
+    up = True
+    while col > 0:
+        if col == 6:
+            col -= 1
+        rows = range(size - 1, -1, -1) if up else range(size)
+        for r in rows:
+            for c in (col, col - 1):
+                if not reserved[r][c]:
+                    bit = final_bits[bit_idx] if bit_idx < len(final_bits) else 0
+                    bit_idx += 1
+                    if (r + c) % 2 == 0:
+                        bit ^= 1
+                    matrix[r][c] = (bit == 1)
+        up = not up
+        col -= 2
+
+    format_bits = [1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0]
+    coords_tl = [
+        (8, 0), (8, 1), (8, 2), (8, 3), (8, 4), (8, 5), (8, 7), (8, 8),
+        (7, 8), (5, 8), (4, 8), (3, 8), (2, 8), (1, 8), (0, 8)
+    ]
+    for idx, (r, c) in enumerate(coords_tl):
+        matrix[r][c] = (format_bits[idx] == 1)
+
+    coords_tr = [(8, size - 1 - i) for i in range(8)]
+    coords_bl = [(size - 7 + i, 8) for i in range(7)]
+    for idx, (r, c) in enumerate(coords_tr):
+        matrix[r][c] = (format_bits[idx] == 1)
+    for idx, (r, c) in enumerate(coords_bl):
+        matrix[r][c] = (format_bits[8 + idx] == 1)
+
+    return matrix
+
+
+def render_terminal_qr(url: str) -> str:
+    """Render a crisp, high-contrast QR code for dark terminal windows."""
+    matrix = generate_qr_matrix(url)
+    border = 2
+    full_matrix = []
+    width = len(matrix) + border * 2
+    for _ in range(border):
+        full_matrix.append([False] * width)
+    for row in matrix:
+        full_matrix.append([False] * border + row + [False] * border)
+    for _ in range(border):
+        full_matrix.append([False] * width)
+
+    lines = []
+    for r in range(0, len(full_matrix), 2):
+        line = "  \033[47m\033[30m"
+        for c in range(len(full_matrix[0])):
+            top = full_matrix[r][c]
+            bot = full_matrix[r + 1][c] if r + 1 < len(full_matrix) else False
+            if top and bot:
+                line += " "
+            elif top and not bot:
+                line += "▀"
+            elif not top and bot:
+                line += "▄"
+            else:
+                line += "█"
+        line += "\033[0m"
+        lines.append(line)
+    return "\n".join(lines)
+
+
+# -------------------------------------------------------------
+# Networking & Server Logic
+# -------------------------------------------------------------
+def get_local_ip() -> str:
+    """Get the Mac's active Wi-Fi / LAN IP address."""
+    for iface in ["en0", "en1", "en2", "bridge0"]:
+        try:
+            res = subprocess.run(["ipconfig", "getifaddr", iface], capture_output=True, text=True)
+            ip = res.stdout.strip()
+            if ip and not ip.startswith("127."):
+                return ip
+        except Exception:
+            pass
+
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "127.0.0.1"
+
+
+def find_free_port(start_port: int = 8000) -> int:
+    """Find the next available TCP port starting from start_port."""
+    port = start_port
+    while port < 65535:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            if s.connect_ex(("0.0.0.0", port)) != 0:
+                return port
+            port += 1
+    return start_port
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="localserver: Serve local directory over Wi-Fi with terminal QR code",
+        usage="localserver [directory] [port]",
+    )
+    parser.add_argument("directory", nargs="?", default=".", help="Directory to serve (default: current directory)")
+    parser.add_argument("port", nargs="?", type=int, default=None, help="Port to serve on (default: 8000)")
+
+    args = parser.parse_args()
+
+    # Handle directory vs port order
+    target_dir = "."
+    port_arg = None
+
+    if args.directory:
+        if args.directory.isdigit():
+            port_arg = int(args.directory)
+            target_dir = "."
+        else:
+            target_dir = args.directory
+
+    if args.port:
+        port_arg = args.port
+
+    target_dir = os.path.abspath(os.path.expanduser(target_dir))
+    if not os.path.exists(target_dir):
+        print(f"\033[1;31mError:\033[0m Directory does not exist: {target_dir}")
+        sys.exit(1)
+
+    port = port_arg if port_arg else find_free_port(8000)
+    local_ip = get_local_ip()
+    url = f"http://{local_ip}:{port}"
+
+    print(f"\n📱 \033[1mLocal Wi-Fi Server Active\033[0m", flush=True)
+    print("──────────────────────────────────────────────────────────────────────────", flush=True)
+    print(f"📁 Serving Directory : \033[33m{target_dir}\033[0m", flush=True)
+    print(f"🌐 Local Address     : \033[1;32m{url}\033[0m", flush=True)
+    print(f"💻 Loopback Address  : http://localhost:{port}", flush=True)
+    print("──────────────────────────────────────────────────────────────────────────", flush=True)
+    print("\nScan with your phone camera on the same Wi-Fi:\n", flush=True)
+
+    print(render_terminal_qr(url), flush=True)
+
+    print("\n\033[90mPress Ctrl + C to stop the server.\033[0m\n", flush=True)
+
+    handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=target_dir)
+
+    class ReuseTCPServer(socketserver.TCPServer):
+        allow_reuse_address = True
+
+    try:
+        with ReuseTCPServer(("0.0.0.0", port), handler) as httpd:
+            httpd.serve_forever()
+    except KeyboardInterrupt:
+        print("\n\n🛑 \033[33mServer stopped.\033[0m\n")
+        sys.exit(0)
+
+
+if __name__ == "__main__":
+    main()

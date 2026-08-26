@@ -1,4 +1,4 @@
-# 📱 Local Wi-Fi Sharing & Terminal QR Code (`serve-qr`)
+# 📱 Local Wi-Fi Web Server & QR Code (`localserver`)
 
 Instantly spin up a lightweight local web server in any directory and render a scannable QR code directly inside your terminal.
 
@@ -7,8 +7,8 @@ Instantly spin up a lightweight local web server in any directory and render a s
 ## 🎯 Features
 
 * **Zero-Setup Mobile Testing:** Open your iPhone or Android camera, scan the terminal QR code, and immediately browse local HTML, images, designs, or files.
+* **Guaranteed QR Rendering:** Pure-Python QR generator embedded with zero third-party dependencies.
 * **Auto IP & Free Port Detection:** Detects your Mac's active Wi-Fi LAN IP (e.g. `192.168.1.x`) and automatically picks an open port if 8000 is occupied.
-* **Pure Python:** Works out of the box with zero third-party dependencies.
 
 ---
 
@@ -16,14 +16,15 @@ Instantly spin up a lightweight local web server in any directory and render a s
 
 ```bash
 # 1. Serve the current directory (default port 8000 or next available)
-serve-qr
+localserver
 
 # 2. Serve a specific folder
-serve-qr ~/Downloads
-serve-qr ~/Projects/my-app
+localserver ~/Downloads
+localserver ~/Projects/my-app
 
 # 3. Serve on a custom port
-serve-qr . 3000
+localserver 3000
+localserver . 5173
 ```
 
 ---
