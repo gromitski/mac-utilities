@@ -5,7 +5,7 @@ System & Cache Space Reclaimer for macOS (Conservative Safe Mode)
 Safely reclaims ghost disk space using official package manager & developer tool cleanups:
 1. Homebrew: Clears outdated formula archives and downloaded bottles (brew cleanup -s).
 2. npm: Purges downloaded tarball cache (npm cache clean --force).
-3. pip: Purges downloaded Python wheel cache (pip cache purge).
+3. pip: Purges downloaded Python wheel and HTTP cache.
 4. Xcode: Clears temporary build cache (DerivedData) if present.
 
 Guarantees:
@@ -97,39 +97,39 @@ def clean_system_caches(dry_run: bool = False, verbose: bool = False) -> int:
     npm_cache_dir = os.path.expanduser("~/.npm/_cacache")
     if os.path.exists(npm_cache_dir):
         npm_size = get_dir_size(npm_cache_dir)
-        print(f"📦 Cleaning npm cache ({format_bytes(npm_size)})...")
-        if dry_run:
-            print(f"   [DRY-RUN] Would clean npm cache: {format_bytes(npm_size)}.")
-        else:
-            npm_bin = find_binary("npm", [
-                os.path.expanduser("~/.nvm/versions/node/v24.18.0/bin/npm"),
-                "/opt/homebrew/bin/npm",
-                "/usr/local/bin/npm",
-            ])
-            if npm_bin:
-                subprocess.run([npm_bin, "cache", "clean", "--force"], capture_output=True, text=True)
+        if npm_size > 0:
+            print(f"📦 Cleaning npm cache ({format_bytes(npm_size)})...")
+            if dry_run:
+                print(f"   [DRY-RUN] Would clean npm cache: {format_bytes(npm_size)}.")
             else:
+                npm_bin = find_binary("npm", [
+                    os.path.expanduser("~/.nvm/versions/node/v24.18.0/bin/npm"),
+                    "/opt/homebrew/bin/npm",
+                    "/usr/local/bin/npm",
+                ])
+                if npm_bin:
+                    subprocess.run([npm_bin, "cache", "clean", "--force"], capture_output=True, text=True)
                 shutil.rmtree(npm_cache_dir, ignore_errors=True)
-            print("   ✓ npm package download cache purged.")
-        tasks_performed += 1
+                print("   ✓ npm package download cache purged.")
+            tasks_performed += 1
 
     # -------------------------------------------------------------
     # 3. Python / pip Cache
     # -------------------------------------------------------------
-    pip_cache_dir = os.path.expanduser("~/Library/Caches/pip")
-    if not os.path.exists(pip_cache_dir):
-        pip_cache_dir = os.path.expanduser("~/.cache/pip")
+    pip_dirs = [os.path.expanduser("~/Library/Caches/pip"), os.path.expanduser("~/.cache/pip")]
+    pip_total_size = sum(get_dir_size(d) for d in pip_dirs)
 
-    if os.path.exists(pip_cache_dir):
-        pip_size = get_dir_size(pip_cache_dir)
-        if pip_size > 0:
-            print(f"🐍 Cleaning pip cache ({format_bytes(pip_size)})...")
-            if dry_run:
-                print(f"   [DRY-RUN] Would clean pip cache: {format_bytes(pip_size)}.")
-            else:
-                subprocess.run([sys.executable, "-m", "pip", "cache", "purge"], capture_output=True, text=True)
-                print("   ✓ Python pip wheel download cache purged.")
-            tasks_performed += 1
+    if pip_total_size > 0:
+        print(f"🐍 Cleaning pip cache ({format_bytes(pip_total_size)})...")
+        if dry_run:
+            print(f"   [DRY-RUN] Would clean pip cache: {format_bytes(pip_total_size)}.")
+        else:
+            subprocess.run([sys.executable, "-m", "pip", "cache", "purge"], capture_output=True, text=True)
+            for d in pip_dirs:
+                if os.path.exists(d):
+                    shutil.rmtree(d, ignore_errors=True)
+            print("   ✓ Python pip wheel & download cache purged.")
+        tasks_performed += 1
 
     # -------------------------------------------------------------
     # 4. Xcode DerivedData Cache (if present)
