@@ -1,0 +1,276 @@
+#!/usr/bin/env python3
+"""
+awake: Friendly Mac Sleep & Display Inhibitor
+----------------------------------------------
+Keeps your Mac and display awake for a specified duration or indefinitely,
+preventing screen sleep, dimming, and idle lock during calls, presentations,
+downloads, and long rendering jobs.
+
+Usage:
+  awake 30m             Keep awake for 30 minutes
+  awake 2h              Keep awake for 2 hours
+  awake 45s             Keep awake for 45 seconds
+  awake on              Keep awake indefinitely until 'awake off'
+  awake off / stop      Restore normal sleep behavior
+  awake status          Check if an awake timer is currently active
+  awake --alfred        Output Alfred 5 Script Filter JSON
+"""
+
+import argparse
+import datetime
+import json
+import os
+import re
+import signal
+import subprocess
+import sys
+import time
+
+STATE_FILE = os.path.expanduser("~/.utilities_awake.json")
+
+
+def parse_duration(duration_str: str) -> int:
+    """Parse time string like 30m, 2h, 45s, 1.5h into seconds."""
+    duration_str = duration_str.strip().lower()
+    if duration_str in ("on", "indefinitely", "inf", "forever"):
+        return 0  # 0 means infinite
+
+    match = re.match(r"^([0-9.]+)\s*([smh]?)$", duration_str)
+    if not match:
+        raise ValueError(f"Invalid duration format: '{duration_str}'. Use e.g. 30m, 1h, 45s.")
+
+    value = float(match.group(1))
+    unit = match.group(2) or "m"  # default to minutes
+
+    if unit == "s":
+        return int(value)
+    elif unit == "m":
+        return int(value * 60)
+    elif unit == "h":
+        return int(value * 3600)
+    return int(value * 60)
+
+
+def send_macos_notification(title: str, subtitle: str, message: str):
+    """Send a native macOS notification banner."""
+    apple_script = f'''display notification "{message}" with title "{title}" subtitle "{subtitle}" sound name "default"'''
+    subprocess.run(["osascript", "-e", apple_script], capture_output=True)
+
+
+def stop_awake() -> bool:
+    """Terminate any active awake / caffeinate process started by this tool."""
+    stopped = False
+    if os.path.exists(STATE_FILE):
+        try:
+            with open(STATE_FILE, "r") as f:
+                data = json.load(f)
+            pid = data.get("pid")
+            if pid:
+                try:
+                    os.kill(pid, signal.SIGTERM)
+                    stopped = True
+                except ProcessLookupError:
+                    pass
+        except Exception:
+            pass
+        try:
+            os.remove(STATE_FILE)
+        except OSError:
+            pass
+
+    return stopped
+
+
+def get_status() -> dict:
+    """Check if an awake process is running and get its remaining time."""
+    if not os.path.exists(STATE_FILE):
+        return {"active": False}
+
+    try:
+        with open(STATE_FILE, "r") as f:
+            data = json.load(f)
+
+        pid = data.get("pid")
+        # Check if process is still running
+        try:
+            os.kill(pid, 0)
+        except (ProcessLookupError, OSError):
+            os.remove(STATE_FILE)
+            return {"active": False}
+
+        expires_at = data.get("expires_at")
+        if expires_at:
+            remaining = int(expires_at - time.time())
+            if remaining <= 0:
+                os.remove(STATE_FILE)
+                return {"active": False}
+            data["remaining_seconds"] = remaining
+        else:
+            data["remaining_seconds"] = None  # indefinite
+
+        data["active"] = True
+        return data
+    except Exception:
+        return {"active": False}
+
+
+def output_alfred_filter(query: str = ""):
+    """Generate JSON for Alfred dropdown."""
+    status = get_status()
+    items = []
+
+    if status.get("active"):
+        rem = status.get("remaining_seconds")
+        if rem is not None:
+            mins = max(1, rem // 60)
+            status_desc = f"Active: ~{mins} minute(s) remaining"
+        else:
+            status_desc = "Active: Indefinitely"
+
+        items.append({
+            "uid": "awake-off",
+            "title": "🛑 Stop Awake (Restore Normal Sleep)",
+            "subtitle": f"{status_desc} • Press Enter to deactivate",
+            "arg": "off",
+            "valid": True,
+        })
+
+    presets = [
+        ("15m", "☕️ Keep Awake for 15 Minutes"),
+        ("30m", "☕️ Keep Awake for 30 Minutes"),
+        ("1h", "☕️ Keep Awake for 1 Hour"),
+        ("2h", "☕️ Keep Awake for 2 Hours"),
+        ("on", "☕️ Keep Awake Indefinitely"),
+        ("off", "🛑 Turn Off Awake"),
+    ]
+
+    for dur, title in presets:
+        items.append({
+            "uid": f"awake-{dur}",
+            "title": title,
+            "subtitle": f"Run 'awake {dur}'",
+            "arg": dur,
+            "autocomplete": dur,
+            "valid": True,
+        })
+
+    if query:
+        q = query.strip().lower()
+        items = [it for it in items if q in it["title"].lower() or q in it["arg"].lower()]
+
+    print(json.dumps({"items": items}, indent=2))
+    sys.exit(0)
+
+
+def start_awake(duration_str: str, notify: bool = False):
+    """Start caffeinate with the parsed duration in the background."""
+    stop_awake()
+
+    try:
+        seconds = parse_duration(duration_str)
+    except ValueError as e:
+        print(f"\033[1;31mError:\033[0m {e}")
+        sys.exit(1)
+
+    cmd = ["caffeinate", "-d", "-i", "-m", "-u"]
+    expires_at = None
+
+    if seconds > 0:
+        cmd.extend(["-t", str(seconds)])
+        expires_at = time.time() + seconds
+        duration_display = f"{seconds // 60} minute(s)" if seconds >= 60 else f"{seconds} second(s)"
+        if seconds >= 3600:
+            duration_display = f"{seconds / 3600:.1f} hour(s)"
+    else:
+        duration_display = "indefinitely (until 'awake off')"
+
+    # Launch detached in background
+    proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    state = {
+        "pid": proc.pid,
+        "started_at": time.time(),
+        "expires_at": expires_at,
+        "duration_str": duration_str,
+    }
+
+    with open(STATE_FILE, "w") as f:
+        json.dump(state, f)
+
+    print(f"\n☕️ \033[1mMac Stay Awake Active\033[0m")
+    print("──────────────────────────────────────────────────────────────────────────")
+    print(f"⏱️  Duration : \033[32m{duration_display}\033[0m")
+    print(f"🔋 Behavior : Display & system sleep prevented.")
+    print("──────────────────────────────────────────────────────────────────────────")
+    print(f"\033[90mTo deactivate anytime, run: \033[1mawake off\033[0m\n")
+
+    if notify:
+        send_macos_notification("Mac Awake Active", f"Duration: {duration_display}", "Display & sleep prevented.")
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="awake: Mac sleep & display inhibitor timer",
+        usage="awake [duration] [options]",
+    )
+    parser.add_argument(
+        "duration",
+        nargs="?",
+        default=None,
+        help="Duration to stay awake (e.g. 30m, 1h, 45s, 'on', 'off', 'status')",
+    )
+    parser.add_argument(
+        "--notify",
+        action="store_true",
+        help="Send a native macOS notification upon start/stop",
+    )
+    parser.add_argument(
+        "--alfred",
+        nargs="?",
+        const="",
+        help="Output Alfred 5 Script Filter JSON",
+    )
+
+    args = parser.parse_args()
+
+    if args.alfred is not None:
+        output_alfred_filter(args.alfred)
+
+    target = (args.duration or "").strip().lower()
+
+    if not target:
+        status = get_status()
+        if status.get("active"):
+            rem = status.get("remaining_seconds")
+            rem_str = f"~{rem // 60}m remaining" if rem is not None else "indefinite"
+            print(f"\n☕️ Awake is currently \033[1;32mACTIVE\033[0m ({rem_str}).")
+            print("Run \033[1mawake off\033[0m to deactivate.\n")
+        else:
+            # Default to 30 minutes if invoked simply as `awake`
+            start_awake("30m", notify=args.notify)
+        return
+
+    if target in ("off", "stop", "kill", "cancel"):
+        if stop_awake():
+            print("\n🛑 \033[33mAwake deactivated.\033[0m Normal sleep behavior restored.\n")
+            if args.notify:
+                send_macos_notification("Mac Awake Deactivated", "Normal sleep restored", "Display and sleep active.")
+        else:
+            print("\n• No active awake timer was running.\n")
+        return
+
+    if target in ("status", "check"):
+        status = get_status()
+        if status.get("active"):
+            rem = status.get("remaining_seconds")
+            rem_str = f"~{rem // 60} minute(s) remaining" if rem is not None else "indefinite"
+            print(f"\n☕️ Awake is currently \033[1;32mACTIVE\033[0m ({rem_str}).\n")
+        else:
+            print("\n• Awake is currently \033[90mINACTIVE\033[0m (normal sleep enabled).\n")
+        return
+
+    start_awake(target, notify=args.notify)
+
+
+if __name__ == "__main__":
+    main()

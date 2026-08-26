@@ -2,13 +2,15 @@
 """
 Clean - Unified Mac Housekeeping CLI & Alfred Trigger
 ------------------------------------------------------
-Orchestrates screenshot, download, and safe system cache housekeeping.
+Orchestrates screenshot, download, cache, and clipboard URL housekeeping.
+
 Usage:
-  clean                 Run standard cleanup (Screenshots + Downloads only)
+  clean                 Run standard file housekeeping (Screenshots + Downloads)
   clean screenshots     Run only screenshot housekeeping
   clean downloads       Run only downloads housekeeping
-  clean --deep / deep   Run Screenshots + Downloads + Safe System Cache Reclaimer
+  clean deep / --deep   Run Screenshots + Downloads + Safe System Cache Reclaimer
   clean cache           Run only the safe system cache reclaimer
+  clean url             Strip tracking parameters from copied clipboard URL
   clean --dry-run / -n  Preview actions across all utilities without touching files
   clean --notify        Run and display a native macOS notification banner (for Alfred)
   clean --alfred-filter Output Alfred 5 Script Filter JSON
@@ -28,6 +30,7 @@ if SCRIPTS_DIR not in sys.path:
 from screenshot_housekeeping import organize_screenshots
 from downloads_housekeeping import organize_downloads
 from system_cache_cleaner import clean_system_caches, format_bytes
+from url_cleaner import run_clean_url, clean_clipboard_url
 
 
 def send_macos_notification(title: str, subtitle: str, message: str):
@@ -66,10 +69,18 @@ def output_alfred_filter(query: str = ""):
             "valid": True,
         },
         {
+            "uid": "clean-url",
+            "title": "Clean URL (Clipboard)",
+            "subtitle": "Strip tracking clutter (utm_*, fbclid, si, ref) from copied link",
+            "arg": "url",
+            "autocomplete": "url",
+            "valid": True,
+        },
+        {
             "uid": "clean-deep",
             "title": "Clean Deep (Screenshots + Downloads + Cache Reclaimer)",
             "subtitle": "Full cleanup + safe Homebrew, npm, pip & dev cache purge",
-            "arg": "--deep",
+            "arg": "deep",
             "autocomplete": "deep",
             "valid": True,
         },
@@ -104,9 +115,9 @@ def main():
     parser.add_argument(
         "target",
         nargs="?",
-        choices=["all", "screenshots", "downloads", "cache", "deep", "--deep", "-n", "--dry-run"],
+        choices=["all", "screenshots", "downloads", "cache", "deep", "--deep", "url", "-n", "--dry-run"],
         default="all",
-        help="Target to clean: 'all' (default), 'screenshots', 'downloads', 'cache', or 'deep'",
+        help="Target to clean: 'all' (default), 'screenshots', 'downloads', 'cache', 'deep', or 'url'",
     )
     parser.add_argument(
         "-n",
@@ -152,6 +163,32 @@ def main():
         args.deep = True
         target = "deep"
 
+    # Scenario: Clean URL (Standalone clipboard utility)
+    if target == "url":
+        cleaned, original, modified = clean_clipboard_url()
+        if not original:
+            print("\n⚠️  Clipboard is empty or contains no valid URL.\n")
+            if args.notify:
+                send_macos_notification("Clean URL", "No URL Found", "Clipboard is empty or not a link.")
+            return
+
+        print("\n🔗 \033[1mURL Tracker Cleaner\033[0m")
+        print("──────────────────────────────────────────────────────────────────────────")
+        print(f"\033[90mOriginal:\033[0m {original}")
+        print(f"\033[32mCleaned :\033[0m \033[1m{cleaned}\033[0m")
+        print("──────────────────────────────────────────────────────────────────────────")
+
+        if modified:
+            print("✓ \033[32mTracking parameters stripped and clean URL copied to clipboard!\033[0m\n")
+            if args.notify:
+                send_macos_notification("Clean URL Copied", "Tracking parameters removed", cleaned)
+        else:
+            print("✓ \033[90mURL was already clean (copied to clipboard).\033[0m\n")
+            if args.notify:
+                send_macos_notification("Clean URL", "Already clean (copied to clipboard)", cleaned)
+        return
+
+    # Standard File & System Housekeeping
     mode_str = " (DRY-RUN)" if args.dry_run else ""
     print(f"\n🧹 \033[1mStarting Mac Housekeeping{mode_str}...\033[0m\n")
 
@@ -186,7 +223,7 @@ def main():
             print(f"   \033[1;31mError organizing downloads:\033[0m {e}")
             has_errors = True
 
-    # 3. Safe System Caches (ONLY run if explicitly requested via 'deep' / '--deep' or 'cache')
+    # 3. Safe System Caches (ONLY run if explicitly requested via 'deep' or 'cache')
     if target in ("deep", "cache") or args.deep:
         print("\033[1;34m[3/3] 🚀 Reclaiming System & Developer Caches...\033[0m")
         try:
