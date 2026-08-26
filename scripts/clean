@@ -2,7 +2,7 @@
 """
 Clean - Unified Mac Housekeeping CLI & Alfred Trigger
 ------------------------------------------------------
-Orchestrates screenshot and download housekeeping with a single command.
+Orchestrates screenshot and download housekeeping in a single command.
 Usage:
   clean                 Run standard cleanup (screenshots + downloads)
   clean --dry-run / -n  Preview actions across all utilities without touching files
@@ -17,27 +17,19 @@ import os
 import subprocess
 import sys
 
+# Ensure scripts directory is in sys.path for direct module import
 SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
-SCREENSHOT_SCRIPT = os.path.join(SCRIPTS_DIR, "screenshot_housekeeping.py")
-DOWNLOADS_SCRIPT = os.path.join(SCRIPTS_DIR, "downloads_housekeeping.py")
+if SCRIPTS_DIR not in sys.path:
+    sys.path.insert(0, SCRIPTS_DIR)
+
+from screenshot_housekeeping import organize_screenshots
+from downloads_housekeeping import organize_downloads
 
 
 def send_macos_notification(title: str, subtitle: str, message: str):
     """Send a native macOS notification banner."""
     apple_script = f'''display notification "{message}" with title "{title}" subtitle "{subtitle}" sound name "default"'''
     subprocess.run(["osascript", "-e", apple_script], capture_output=True)
-
-
-def run_command(cmd_args, dry_run=False, verbose=False):
-    """Execute a python utility script and return its returncode and output."""
-    full_cmd = [sys.executable] + cmd_args
-    if dry_run:
-        full_cmd.append("--dry-run")
-    if verbose:
-        full_cmd.append("-v")
-
-    result = subprocess.run(full_cmd, capture_output=True, text=True)
-    return result.returncode, result.stdout, result.stderr
 
 
 def main():
@@ -86,37 +78,36 @@ def main():
     # 1. Screenshots
     if args.target in ("all", "screenshots"):
         print("\033[1;34m[1/2] 📸 Cleaning Screenshots...\033[0m")
-        code, stdout, stderr = run_command([SCREENSHOT_SCRIPT], dry_run=args.dry_run, verbose=args.verbose)
-        if code == 0:
-            for line in stdout.splitlines():
-                if "Step 1 Complete" in line or "Step 2 Complete" in line or "[DRY-RUN]" in line:
-                    print(f"   {line.strip()}")
+        try:
+            organize_screenshots(
+                base_dir="~/Pictures/screenshots",
+                dry_run=args.dry_run,
+                verbose=args.verbose,
+            )
             summary_messages.append("Screenshots organized")
-        else:
-            print(f"   \033[1;31mError running screenshot housekeeping:\033[0m {stderr}")
+        except Exception as e:
+            print(f"   \033[1;31mError organizing screenshots:\033[0m {e}")
             has_errors = True
-        print()
 
     # 2. Downloads
     if args.target in ("all", "downloads"):
         print("\033[1;34m[2/2] 📥 Cleaning Downloads...\033[0m")
-        code, stdout, stderr = run_command([DOWNLOADS_SCRIPT], dry_run=args.dry_run, verbose=args.verbose)
-        if code == 0:
-            for line in stdout.splitlines():
-                if "Step 1 Summary" in line or "Step 2 Summary" in line or "[DRY-RUN]" in line:
-                    print(f"   {line.strip()}")
+        try:
+            organize_downloads(
+                downloads_dir="~/Downloads",
+                dry_run=args.dry_run,
+                verbose=args.verbose,
+            )
             summary_messages.append("Downloads organized")
-        else:
-            print(f"   \033[1;31mError running downloads housekeeping:\033[0m {stderr}")
+        except Exception as e:
+            print(f"   \033[1;31mError organizing downloads:\033[0m {e}")
             has_errors = True
-        print()
 
     # 3. Deep mode (Future-proofed hook)
     if args.deep:
         print("\033[1;34m[Extra] 🚀 Deep System & Cache Cleanup...\033[0m")
-        print("   • Deep cleanup module will be connected when system cache tool is added.")
+        print("   • Deep cleanup module will be connected when system cache tool is added.\n")
         summary_messages.append("Deep cache purge simulated")
-        print()
 
     if has_errors:
         print("\033[1;31m⚠️  Housekeeping completed with warnings/errors.\033[0m\n")
