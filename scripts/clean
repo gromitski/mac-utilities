@@ -10,7 +10,7 @@ Usage:
   clean downloads       Run only downloads housekeeping
   clean deep / --deep   Run Screenshots + Downloads + Safe System Cache Reclaimer
   clean cache           Run only the safe system cache reclaimer
-  clean url             Strip tracking parameters from copied clipboard URL
+  clean url [link]      Strip tracking parameters from copied clipboard URL or provided link
   clean --dry-run / -n  Preview actions across all utilities without touching files
   clean --notify        Run and display a native macOS notification banner (for Alfred)
   clean --alfred-filter Output Alfred 5 Script Filter JSON
@@ -30,7 +30,7 @@ if SCRIPTS_DIR not in sys.path:
 from screenshot_housekeeping import organize_screenshots
 from downloads_housekeeping import organize_downloads
 from system_cache_cleaner import clean_system_caches, format_bytes
-from url_cleaner import run_clean_url, clean_clipboard_url
+from url_cleaner import clean_clipboard_url
 
 
 def send_macos_notification(title: str, subtitle: str, message: str):
@@ -110,14 +110,18 @@ def output_alfred_filter(query: str = ""):
 def main():
     parser = argparse.ArgumentParser(
         description="Clean: Unified Mac Housekeeping CLI",
-        usage="clean [target] [options]",
+        usage="clean [target] [extra_args...] [options]",
     )
     parser.add_argument(
         "target",
         nargs="?",
-        choices=["all", "screenshots", "downloads", "cache", "deep", "--deep", "url", "-n", "--dry-run"],
         default="all",
-        help="Target to clean: 'all' (default), 'screenshots', 'downloads', 'cache', 'deep', or 'url'",
+        help="Target to clean: 'all' (default), 'screenshots', 'downloads', 'cache', 'deep', 'url', or a direct URL",
+    )
+    parser.add_argument(
+        "extra_args",
+        nargs="*",
+        help="Optional arguments (e.g. direct URL passed to 'clean url')",
     )
     parser.add_argument(
         "-n",
@@ -156,16 +160,25 @@ def main():
 
     # Normalize target argument
     target = args.target
-    if target in ("-n", "--dry-run"):
+    input_url = None
+
+    # Check if target itself is a URL (e.g. `clean https://...`)
+    if target.startswith("http://") or target.startswith("https://"):
+        input_url = target
+        target = "url"
+    elif target == "url":
+        if args.extra_args:
+            input_url = args.extra_args[0]
+    elif target in ("-n", "--dry-run"):
         args.dry_run = True
         target = "all"
     elif target in ("deep", "--deep"):
         args.deep = True
         target = "deep"
 
-    # Scenario: Clean URL (Standalone clipboard utility)
+    # Scenario: Clean URL (Standalone clipboard or direct URL utility)
     if target == "url":
-        cleaned, original, modified = clean_clipboard_url()
+        cleaned, original, modified = clean_clipboard_url(input_url)
         if not original:
             print("\n⚠️  Clipboard is empty or contains no valid URL.\n")
             if args.notify:
