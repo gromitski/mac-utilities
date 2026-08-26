@@ -1,6 +1,6 @@
 # Mac Utilities (`mac-utilities`)
 
-A collection of lightweight, portable automation scripts and LaunchAgents for macOS.
+A collection of lightweight, portable automation scripts, LaunchAgents, and Alfred workflows for macOS.
 
 ---
 
@@ -8,6 +8,7 @@ A collection of lightweight, portable automation scripts and LaunchAgents for ma
 
 | Utility | Description | Documentation |
 | :--- | :--- | :--- |
+| **`clean`** | Master on-demand CLI & Alfred trigger (`clean`, `clean screenshots`, `clean downloads`, `clean --deep`, `clean -n`). | [Instructions & Details](docs/clean.md) |
 | **Screenshot Housekeeping** | Keeps today's screenshots in root, groups older ones into daily folders, purges items older than 14 days to Trash, and permanently protects `Archive/`. | [Instructions & Details](docs/screenshot_housekeeping.md) |
 | **Downloads Housekeeping** | Keeps recent files in root, purges installers after 14 days, groups items into 3-month rolling archives, and moves old unzipped folders to `_review/`. | [Instructions & Details](docs/downloads_housekeeping.md) |
 
@@ -21,13 +22,20 @@ To restore and activate all utilities on a new or fresh Mac:
 # 1. Clone this repository
 git clone git@github.com:gromitski/mac-utilities.git ~/utilities
 
-# 2. Make all scripts executable
-chmod +x ~/utilities/scripts/*.py
+# 2. Add scripts to PATH in ~/.zshrc
+echo 'export PATH="$HOME/utilities/scripts:$PATH"' >> ~/.zshrc
+source ~/.zshrc
 
-# 3. Install and load LaunchAgents
+# 3. Make all scripts executable
+chmod +x ~/utilities/scripts/*
+
+# 4. Install and load automated daily schedules (launchd)
 cp ~/utilities/launchd/*.plist ~/Library/LaunchAgents/
 launchctl load ~/Library/LaunchAgents/com.gromitski.screenshot-housekeeping.plist
 launchctl load ~/Library/LaunchAgents/com.gromitski.downloads-housekeeping.plist
+
+# 5. (Optional) Install Alfred Workflow
+open ~/utilities/alfred/Clean.alfredworkflow
 ```
 
 ---

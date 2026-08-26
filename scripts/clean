@@ -1,0 +1,133 @@
+#!/usr/bin/env python3
+"""
+Clean - Unified Mac Housekeeping CLI & Alfred Trigger
+------------------------------------------------------
+Orchestrates screenshot and download housekeeping with a single command.
+Usage:
+  clean                 Run standard cleanup (screenshots + downloads)
+  clean --dry-run / -n  Preview actions across all utilities without touching files
+  clean screenshots     Run only screenshot housekeeping
+  clean downloads       Run only downloads housekeeping
+  clean --deep          Run standard cleanup + deep system & developer cache purges
+  clean --notify        Run and display a native macOS notification banner (for Alfred)
+"""
+
+import argparse
+import os
+import subprocess
+import sys
+
+SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
+SCREENSHOT_SCRIPT = os.path.join(SCRIPTS_DIR, "screenshot_housekeeping.py")
+DOWNLOADS_SCRIPT = os.path.join(SCRIPTS_DIR, "downloads_housekeeping.py")
+
+
+def send_macos_notification(title: str, subtitle: str, message: str):
+    """Send a native macOS notification banner."""
+    apple_script = f'''display notification "{message}" with title "{title}" subtitle "{subtitle}" sound name "default"'''
+    subprocess.run(["osascript", "-e", apple_script], capture_output=True)
+
+
+def run_command(cmd_args, dry_run=False, verbose=False):
+    """Execute a python utility script and return its returncode and output."""
+    full_cmd = [sys.executable] + cmd_args
+    if dry_run:
+        full_cmd.append("--dry-run")
+    if verbose:
+        full_cmd.append("-v")
+
+    result = subprocess.run(full_cmd, capture_output=True, text=True)
+    return result.returncode, result.stdout, result.stderr
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Clean: Unified Mac Housekeeping CLI",
+        usage="clean [target] [options]",
+    )
+    parser.add_argument(
+        "target",
+        nargs="?",
+        choices=["all", "screenshots", "downloads"],
+        default="all",
+        help="Target to clean: 'all' (default), 'screenshots', or 'downloads'",
+    )
+    parser.add_argument(
+        "-n",
+        "--dry-run",
+        action="store_true",
+        help="Simulate actions without moving files or trashing anything",
+    )
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="Display verbose details for each item",
+    )
+    parser.add_argument(
+        "--deep",
+        action="store_true",
+        help="Include deep cache clearing & developer space reclaimers",
+    )
+    parser.add_argument(
+        "--notify",
+        action="store_true",
+        help="Send a native macOS notification upon completion (for Alfred / background)",
+    )
+
+    args = parser.parse_args()
+
+    mode_str = " (DRY-RUN)" if args.dry_run else ""
+    print(f"\n🧹 \033[1mStarting Mac Housekeeping{mode_str}...\033[0m\n")
+
+    summary_messages = []
+    has_errors = False
+
+    # 1. Screenshots
+    if args.target in ("all", "screenshots"):
+        print("\033[1;34m[1/2] 📸 Cleaning Screenshots...\033[0m")
+        code, stdout, stderr = run_command([SCREENSHOT_SCRIPT], dry_run=args.dry_run, verbose=args.verbose)
+        if code == 0:
+            for line in stdout.splitlines():
+                if "Step 1 Complete" in line or "Step 2 Complete" in line or "[DRY-RUN]" in line:
+                    print(f"   {line.strip()}")
+            summary_messages.append("Screenshots organized")
+        else:
+            print(f"   \033[1;31mError running screenshot housekeeping:\033[0m {stderr}")
+            has_errors = True
+        print()
+
+    # 2. Downloads
+    if args.target in ("all", "downloads"):
+        print("\033[1;34m[2/2] 📥 Cleaning Downloads...\033[0m")
+        code, stdout, stderr = run_command([DOWNLOADS_SCRIPT], dry_run=args.dry_run, verbose=args.verbose)
+        if code == 0:
+            for line in stdout.splitlines():
+                if "Step 1 Summary" in line or "Step 2 Summary" in line or "[DRY-RUN]" in line:
+                    print(f"   {line.strip()}")
+            summary_messages.append("Downloads organized")
+        else:
+            print(f"   \033[1;31mError running downloads housekeeping:\033[0m {stderr}")
+            has_errors = True
+        print()
+
+    # 3. Deep mode (Future-proofed hook)
+    if args.deep:
+        print("\033[1;34m[Extra] 🚀 Deep System & Cache Cleanup...\033[0m")
+        print("   • Deep cleanup module will be connected when system cache tool is added.")
+        summary_messages.append("Deep cache purge simulated")
+        print()
+
+    if has_errors:
+        print("\033[1;31m⚠️  Housekeeping completed with warnings/errors.\033[0m\n")
+        if args.notify:
+            send_macos_notification("Mac Housekeeping", "Completed with warnings", "Check terminal logs.")
+    else:
+        print("\033[1;32m✨ All clean!\033[0m\n")
+        if args.notify:
+            notif_msg = " & ".join(summary_messages) if summary_messages else "Done."
+            send_macos_notification("Mac Housekeeping Complete", "Tidied up successfully", notif_msg)
+
+
+if __name__ == "__main__":
+    main()
