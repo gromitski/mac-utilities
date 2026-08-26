@@ -10,9 +10,11 @@ Usage:
   clean downloads       Run only downloads housekeeping
   clean --deep          Run standard cleanup + deep system & developer cache purges
   clean --notify        Run and display a native macOS notification banner (for Alfred)
+  clean --alfred-filter Output Alfred 5 Script Filter JSON
 """
 
 import argparse
+import json
 import os
 import subprocess
 import sys
@@ -32,6 +34,58 @@ def send_macos_notification(title: str, subtitle: str, message: str):
     subprocess.run(["osascript", "-e", apple_script], capture_output=True)
 
 
+def output_alfred_filter(query: str = ""):
+    """Generate JSON for Alfred Script Filter dropdown."""
+    query = (query or "").strip().lower()
+
+    all_items = [
+        {
+            "uid": "clean-all",
+            "title": "Clean All (Screenshots + Downloads)",
+            "subtitle": "Organize screenshots into day folders and downloads into monthly archives",
+            "arg": "all",
+            "autocomplete": "all",
+            "valid": True,
+        },
+        {
+            "uid": "clean-screenshots",
+            "title": "Clean Screenshots",
+            "subtitle": "Organize all loose screenshots into YYYY-MM-DD day folders",
+            "arg": "screenshots",
+            "autocomplete": "screenshots",
+            "valid": True,
+        },
+        {
+            "uid": "clean-downloads",
+            "title": "Clean Downloads",
+            "subtitle": "Organize loose downloads into monthly archives and purge installers",
+            "arg": "downloads",
+            "autocomplete": "downloads",
+            "valid": True,
+        },
+        {
+            "uid": "clean-deep",
+            "title": "Clean Deep (System & Dev Caches)",
+            "subtitle": "Run standard cleanups + deep system cache purges",
+            "arg": "--deep",
+            "autocomplete": "deep",
+            "valid": True,
+        },
+    ]
+
+    if query:
+        filtered = [
+            item for item in all_items
+            if query in item["title"].lower() or query in item["arg"].lower() or query in item["autocomplete"].lower()
+        ]
+        items_to_show = filtered if filtered else all_items
+    else:
+        items_to_show = all_items
+
+    print(json.dumps({"items": items_to_show}, indent=2))
+    sys.exit(0)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Clean: Unified Mac Housekeeping CLI",
@@ -40,9 +94,9 @@ def main():
     parser.add_argument(
         "target",
         nargs="?",
-        choices=["all", "screenshots", "downloads"],
+        choices=["all", "screenshots", "downloads", "--deep", "-n", "--dry-run"],
         default="all",
-        help="Target to clean: 'all' (default), 'screenshots', or 'downloads'",
+        help="Target to clean: 'all' (default), 'screenshots', 'downloads', or '--deep'",
     )
     parser.add_argument(
         "-n",
@@ -66,8 +120,27 @@ def main():
         action="store_true",
         help="Send a native macOS notification upon completion (for Alfred / background)",
     )
+    parser.add_argument(
+        "--alfred-filter",
+        nargs="?",
+        const="",
+        help="Generate Alfred Script Filter JSON",
+    )
 
     args = parser.parse_args()
+
+    # Handle Alfred Script Filter query
+    if args.alfred_filter is not None:
+        output_alfred_filter(args.alfred_filter)
+
+    # Normalize positional argument flags
+    target = args.target
+    if target in ("-n", "--dry-run"):
+        args.dry_run = True
+        target = "all"
+    elif target == "--deep":
+        args.deep = True
+        target = "all"
 
     mode_str = " (DRY-RUN)" if args.dry_run else ""
     print(f"\n🧹 \033[1mStarting Mac Housekeeping{mode_str}...\033[0m\n")
@@ -76,7 +149,7 @@ def main():
     has_errors = False
 
     # 1. Screenshots
-    if args.target in ("all", "screenshots"):
+    if target in ("all", "screenshots"):
         print("\033[1;34m[1/2] 📸 Cleaning Screenshots...\033[0m")
         try:
             organize_screenshots(
@@ -90,7 +163,7 @@ def main():
             has_errors = True
 
     # 2. Downloads
-    if args.target in ("all", "downloads"):
+    if target in ("all", "downloads"):
         print("\033[1;34m[2/2] 📥 Cleaning Downloads...\033[0m")
         try:
             organize_downloads(
@@ -117,7 +190,8 @@ def main():
         print("\033[1;32m✨ All clean!\033[0m\n")
         if args.notify:
             notif_msg = " & ".join(summary_messages) if summary_messages else "Done."
-            send_macos_notification("Mac Housekeeping Complete", "Tidied up successfully", notif_msg)
+            target_label = f" ({target.capitalize()})" if target in ("screenshots", "downloads") else ""
+            send_macos_notification(f"Mac Housekeeping Complete{target_label}", "Tidied up successfully", notif_msg)
 
 
 if __name__ == "__main__":

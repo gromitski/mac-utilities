@@ -1,17 +1,16 @@
 # 🧹 Clean Command & Alfred Trigger (`clean`)
 
-The master on-demand runner that executes all housekeeping tasks across **Screenshots** and **Downloads** in one command.
+The master on-demand runner that executes housekeeping tasks across **Screenshots** and **Downloads** in one command.
 
 ---
 
 ## 🎯 Features
 
-* **Single Universal Command:** Type `clean` anywhere in Terminal or trigger via Alfred.
-* **Instant Tidy:** Sweeps all loose screenshots into daily `YYYY-MM-DD/` folders and all loose downloads into monthly `YYYY-MM/` folders immediately.
-* **Unified Report:** Runs both housekeeping utilities in-process and presents a sleek status report.
-* **Granular Control:** Supports targeting only screenshots or only downloads.
+* **Universal CLI & Alfred Trigger:** Type `clean` anywhere in Terminal or launch via Alfred.
+* **Interactive Alfred Menu:** Typing `clean` in Alfred shows an instant interactive menu with selectable options.
+* **Targeted Cleanups:** Run only screenshots or only downloads on-demand.
 * **Dry-Run Mode:** Test actions beforehand with `-n` or `--dry-run`.
-* **Native Notifications:** Displays a macOS notification banner when triggered via Alfred or when `--notify` is passed.
+* **Native Notifications:** Displays a macOS notification banner showing exactly which target was cleaned.
 
 ---
 
@@ -21,16 +20,16 @@ The master on-demand runner that executes all housekeeping tasks across **Screen
 # 1. Standard full cleanup (Screenshots + Downloads)
 clean
 
-# 2. Preview actions without touching any files
+# 2. Clean only Screenshots
+clean screenshots
+
+# 3. Clean only Downloads
+clean downloads
+
+# 4. Preview actions without touching any files
 clean --dry-run
 # or
 clean -n
-
-# 3. Clean only Screenshots
-clean screenshots
-
-# 4. Clean only Downloads
-clean downloads
 
 # 5. Deep Cleanup (future-proofed for system caches & dev artifacts)
 clean --deep
@@ -44,13 +43,17 @@ clean -v
 ## 🔍 Triggering via Alfred
 
 1. Press your Alfred hotkey (e.g. `Cmd + Space`).
-2. Type **`clean`** and hit **Enter**.
-3. The script executes instantly in the background and posts a native macOS notification:
-   > 🧹 **Mac Housekeeping Complete**  
-   > *Screenshots organized & Downloads organized.*
+2. Type **`clean`**.
+3. Alfred will immediately display interactive options in the dropdown:
+   * 🧹 **Clean All (Screenshots + Downloads)** ➔ Cleans both folders
+   * 📸 **Clean Screenshots** ➔ Cleans only screenshots
+   * 📥 **Clean Downloads** ➔ Cleans only downloads
+   * 🚀 **Clean Deep** ➔ Runs full cleanup + deep cache purges
+4. Select with arrow keys or type `clean screenshots` / `clean downloads` directly and hit **Enter**.
+5. You'll receive a native macOS notification confirming what was cleaned.
 
 ### Restoring Alfred Workflow on a New Mac
-The portable workflow file is saved in `~/utilities/alfred/Clean.alfredworkflow`. Simply double-click it on any Mac with Alfred to install.
+The portable workflow file is saved in `~/utilities/alfred/Clean.alfredworkflow`. Double-click it on any Mac with Alfred to install.
 
 ---
 
