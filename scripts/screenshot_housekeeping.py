@@ -2,10 +2,10 @@
 """
 Screenshot Housekeeping Utility for macOS
 ------------------------------------------
-1. Keeps today's screenshots in the root directory for easy access.
-2. Organizes screenshots from previous days into 'YYYY-MM-DD' day folders.
-3. Automatically moves 'YYYY-MM-DD' folders older than 14 days to the macOS Trash (~/.Trash).
-4. Strictly protects any custom folders (e.g. 'Archive') from modification or deletion.
+1. Organizes all loose screenshots into their respective 'YYYY-MM-DD' day folders.
+2. Automatically moves 'YYYY-MM-DD' day folders older than 14 days to the macOS Trash (~/.Trash).
+3. Strictly protects any custom folders (e.g. 'Archive') from modification or deletion.
+4. Seamlessly appends to existing date folders without conflicts.
 """
 
 import argparse
@@ -46,7 +46,7 @@ def move_to_trash(target_path: str, dry_run: bool = False, verbose: bool = False
 
     # Handle name collision in Trash
     if os.path.exists(dest_path):
-        timestamp = datetime.datetime.now().strftime("%H%M%S")
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         dest_path = os.path.join(trash_dir, f"{base_name}_{timestamp}")
 
     if dry_run:
@@ -64,7 +64,7 @@ def move_to_trash(target_path: str, dry_run: bool = False, verbose: bool = False
 
 
 def organize_screenshots(
-    base_dir: str,
+    base_dir: str = "~/Pictures/screenshots",
     retention_days: int = 14,
     archive_name: str = "Archive",
     dry_run: bool = False,
@@ -89,10 +89,9 @@ def organize_screenshots(
         print("Mode             : LIVE EXECUTION\n")
 
     # -------------------------------------------------------------
-    # Step 1: Organize loose screenshot files into YYYY-MM-DD folders
+    # Step 1: Organize ALL loose screenshot files into YYYY-MM-DD folders
     # -------------------------------------------------------------
     moved_count = 0
-    kept_today_count = 0
 
     for item in os.listdir(base_dir):
         item_path = os.path.join(base_dir, item)
@@ -106,14 +105,6 @@ def organize_screenshots(
             continue
 
         file_date = parse_file_date(item, item_path)
-
-        if file_date == today:
-            kept_today_count += 1
-            if verbose:
-                print(f"Preserving in root (today): {item}")
-            continue
-
-        # File is from a previous day -> move into day folder
         date_folder_name = file_date.strftime("%Y-%m-%d")
         date_folder_path = os.path.join(base_dir, date_folder_name)
         target_file_path = os.path.join(date_folder_path, item)
@@ -134,7 +125,7 @@ def organize_screenshots(
             if verbose:
                 print(f"Moved: {item} -> {date_folder_name}/")
 
-    print(f"Step 1 Complete : {moved_count} previous-day file(s) organized, {kept_today_count} today's file(s) preserved in root.")
+    print(f"Step 1 Complete : {moved_count} screenshot file(s) organized into day folders.")
 
     # -------------------------------------------------------------
     # Step 2: Clean up YYYY-MM-DD day folders older than retention_days

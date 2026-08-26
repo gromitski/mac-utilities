@@ -2,13 +2,13 @@
 """
 Downloads Housekeeping Utility for macOS
 -----------------------------------------
-1. Keeps new files and recent unzipped folders (<= 14 days) loose in ~/Downloads for easy access.
+1. Organizes all loose files and unzipped folders into rolling 3-month 'YYYY-MM' folders.
 2. Automatically trashes installer files (.dmg, .pkg, .iso, .app installers) older than 14 days.
-3. Groups older files and unzipped folders (> 14 days) into rolling 3-month 'YYYY-MM' folders.
-4. For monthly folders older than 3 months:
+3. For monthly folders older than 3 months:
    - Loose files are moved to macOS Trash (~/.Trash).
    - Unzipped directories / custom folders are moved to '_review/' for safe manual review.
-5. Strictly protects the '_review/' folder from being moved or deleted.
+4. Strictly protects the '_review/' folder from being moved or deleted.
+5. Seamlessly appends to existing month folders without conflicts.
 """
 
 import argparse
@@ -86,11 +86,11 @@ def move_to_review(target_path: str, review_dir: str, dry_run: bool = False, ver
 def organize_downloads(
     downloads_dir: str = "~/Downloads",
     installer_days: int = 14,
-    recent_days: int = 14,
     archive_months: int = 3,
     review_folder_name: str = "_review",
     dry_run: bool = False,
     verbose: bool = False,
+    **kwargs,
 ):
     downloads_dir = os.path.abspath(os.path.expanduser(downloads_dir))
     if not os.path.exists(downloads_dir):
@@ -115,7 +115,6 @@ def organize_downloads(
     print(f"=== Downloads Housekeeping ({datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}) ===")
     print(f"Target Directory     : {downloads_dir}")
     print(f"Today's Date         : {today}")
-    print(f"Recent Window        : {recent_days} days (Preserving in root)")
     print(f"Installer Purge      : {installer_days} days (Trashing .dmg/.pkg/.iso)")
     print(f"Archive Retention    : {archive_months} months (~{archive_months * 30} days)")
     print(f"Review Folder        : {review_dir} (For unzipped folders >3 months)")
@@ -125,11 +124,9 @@ def organize_downloads(
         print("Mode                 : LIVE EXECUTION\n")
 
     # -------------------------------------------------------------
-    # Step 1: Scan Root of ~/Downloads
+    # Step 1: Scan Root of ~/Downloads and Organize ALL loose items
     # -------------------------------------------------------------
     trashed_installers = 0
-    kept_recent_files = 0
-    kept_recent_dirs = 0
     moved_to_month_files = 0
     moved_to_month_dirs = 0
 
@@ -148,17 +145,13 @@ def organize_downloads(
 
         # Case A: Loose Files
         if os.path.isfile(item_path):
+            # Old installer files (> 14 days) -> Trash
             if is_installer(item) and age_days > installer_days:
                 if move_to_trash(item_path, dry_run=dry_run, verbose=verbose):
                     trashed_installers += 1
                 continue
 
-            if age_days <= recent_days:
-                kept_recent_files += 1
-                if verbose:
-                    print(f"Preserving in root (file): {item} (Age: {age_days}d)")
-                continue
-
+            # All other loose files -> Move to YYYY-MM folder
             month_folder_name = mtime.strftime("%Y-%m")
             month_folder_path = os.path.join(downloads_dir, month_folder_name)
             dest_file_path = os.path.join(month_folder_path, item)
@@ -181,20 +174,17 @@ def organize_downloads(
 
         # Case B: Directories / Unzipped folders
         elif os.path.isdir(item_path):
+            # Skip existing monthly archive folders (processed in Step 2)
             if MONTH_DIR_PATTERN.match(item):
                 continue
 
+            # Installer app bundles (> 14 days)
             if is_installer(item) and age_days > installer_days:
                 if move_to_trash(item_path, dry_run=dry_run, verbose=verbose):
                     trashed_installers += 1
                 continue
 
-            if age_days <= recent_days:
-                kept_recent_dirs += 1
-                if verbose:
-                    print(f"Preserving in root (folder): {item}/ (Age: {age_days}d)")
-                continue
-
+            # Move unzipped folder into YYYY-MM folder
             month_folder_name = mtime.strftime("%Y-%m")
             month_folder_path = os.path.join(downloads_dir, month_folder_name)
             dest_dir_path = os.path.join(month_folder_path, item)
@@ -214,7 +204,7 @@ def organize_downloads(
                 if verbose:
                     print(f"Moved folder: {item}/ -> {month_folder_name}/")
 
-    print(f"\nStep 1 Summary : {trashed_installers} installer(s) trashed, {kept_recent_files} file(s) & {kept_recent_dirs} folder(s) kept in root.")
+    print(f"\nStep 1 Summary : {trashed_installers} installer(s) trashed.")
     print(f"                 {moved_to_month_files} file(s) & {moved_to_month_dirs} unzipped folder(s) organized into monthly folders.\n")
 
     # -------------------------------------------------------------
@@ -300,12 +290,6 @@ def main():
         help="Retention period in days for installer files (.dmg, .pkg, .iso) before trashing (default: 14)",
     )
     parser.add_argument(
-        "--recent-days",
-        type=int,
-        default=14,
-        help="Days to keep recent downloads loose in root (default: 14)",
-    )
-    parser.add_argument(
         "--months",
         type=int,
         default=3,
@@ -332,7 +316,6 @@ def main():
     organize_downloads(
         downloads_dir=args.dir,
         installer_days=args.installers_days,
-        recent_days=args.recent_days,
         archive_months=args.months,
         review_folder_name=args.review_name,
         dry_run=args.dry_run,
