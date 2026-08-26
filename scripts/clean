@@ -2,13 +2,14 @@
 """
 Clean - Unified Mac Housekeeping CLI & Alfred Trigger
 ------------------------------------------------------
-Orchestrates screenshot and download housekeeping in a single command.
+Orchestrates screenshot, download, and safe system cache housekeeping.
 Usage:
-  clean                 Run standard cleanup (screenshots + downloads)
-  clean --dry-run / -n  Preview actions across all utilities without touching files
+  clean                 Run standard cleanup (Screenshots + Downloads only)
   clean screenshots     Run only screenshot housekeeping
   clean downloads       Run only downloads housekeeping
-  clean --deep          Run standard cleanup + deep system & developer cache purges
+  clean --deep / deep   Run Screenshots + Downloads + Safe System Cache Reclaimer
+  clean cache           Run only the safe system cache reclaimer
+  clean --dry-run / -n  Preview actions across all utilities without touching files
   clean --notify        Run and display a native macOS notification banner (for Alfred)
   clean --alfred-filter Output Alfred 5 Script Filter JSON
 """
@@ -26,6 +27,7 @@ if SCRIPTS_DIR not in sys.path:
 
 from screenshot_housekeeping import organize_screenshots
 from downloads_housekeeping import organize_downloads
+from system_cache_cleaner import clean_system_caches, format_bytes
 
 
 def send_macos_notification(title: str, subtitle: str, message: str):
@@ -65,10 +67,18 @@ def output_alfred_filter(query: str = ""):
         },
         {
             "uid": "clean-deep",
-            "title": "Clean Deep (System & Dev Caches)",
-            "subtitle": "Run standard cleanups + deep system cache purges",
+            "title": "Clean Deep (Screenshots + Downloads + Cache Reclaimer)",
+            "subtitle": "Full cleanup + safe Homebrew, npm, pip & dev cache purge",
             "arg": "--deep",
             "autocomplete": "deep",
+            "valid": True,
+        },
+        {
+            "uid": "clean-cache",
+            "title": "Clean Caches Only",
+            "subtitle": "Safely purge Homebrew, npm, pip, and developer build caches",
+            "arg": "cache",
+            "autocomplete": "cache",
             "valid": True,
         },
     ]
@@ -94,9 +104,9 @@ def main():
     parser.add_argument(
         "target",
         nargs="?",
-        choices=["all", "screenshots", "downloads", "--deep", "-n", "--dry-run"],
+        choices=["all", "screenshots", "downloads", "cache", "deep", "--deep", "-n", "--dry-run"],
         default="all",
-        help="Target to clean: 'all' (default), 'screenshots', 'downloads', or '--deep'",
+        help="Target to clean: 'all' (default), 'screenshots', 'downloads', 'cache', or 'deep'",
     )
     parser.add_argument(
         "-n",
@@ -133,14 +143,14 @@ def main():
     if args.alfred_filter is not None:
         output_alfred_filter(args.alfred_filter)
 
-    # Normalize positional argument flags
+    # Normalize target argument
     target = args.target
     if target in ("-n", "--dry-run"):
         args.dry_run = True
         target = "all"
-    elif target == "--deep":
+    elif target in ("deep", "--deep"):
         args.deep = True
-        target = "all"
+        target = "deep"
 
     mode_str = " (DRY-RUN)" if args.dry_run else ""
     print(f"\n🧹 \033[1mStarting Mac Housekeeping{mode_str}...\033[0m\n")
@@ -148,9 +158,9 @@ def main():
     summary_messages = []
     has_errors = False
 
-    # 1. Screenshots
-    if target in ("all", "screenshots"):
-        print("\033[1;34m[1/2] 📸 Cleaning Screenshots...\033[0m")
+    # 1. Screenshots (run for 'all', 'deep', or 'screenshots')
+    if target in ("all", "deep", "screenshots"):
+        print("\033[1;34m[1/3] 📸 Cleaning Screenshots...\033[0m")
         try:
             organize_screenshots(
                 base_dir="~/Pictures/screenshots",
@@ -162,9 +172,9 @@ def main():
             print(f"   \033[1;31mError organizing screenshots:\033[0m {e}")
             has_errors = True
 
-    # 2. Downloads
-    if target in ("all", "downloads"):
-        print("\033[1;34m[2/2] 📥 Cleaning Downloads...\033[0m")
+    # 2. Downloads (run for 'all', 'deep', or 'downloads')
+    if target in ("all", "deep", "downloads"):
+        print("\033[1;34m[2/3] 📥 Cleaning Downloads...\033[0m")
         try:
             organize_downloads(
                 downloads_dir="~/Downloads",
@@ -176,11 +186,21 @@ def main():
             print(f"   \033[1;31mError organizing downloads:\033[0m {e}")
             has_errors = True
 
-    # 3. Deep mode (Future-proofed hook)
-    if args.deep:
-        print("\033[1;34m[Extra] 🚀 Deep System & Cache Cleanup...\033[0m")
-        print("   • Deep cleanup module will be connected when system cache tool is added.\n")
-        summary_messages.append("Deep cache purge simulated")
+    # 3. Safe System Caches (ONLY run if explicitly requested via 'deep' / '--deep' or 'cache')
+    if target in ("deep", "cache") or args.deep:
+        print("\033[1;34m[3/3] 🚀 Reclaiming System & Developer Caches...\033[0m")
+        try:
+            reclaimed_bytes = clean_system_caches(
+                dry_run=args.dry_run,
+                verbose=args.verbose,
+            )
+            if not args.dry_run and reclaimed_bytes > 0:
+                summary_messages.append(f"Reclaimed {format_bytes(reclaimed_bytes)}")
+            else:
+                summary_messages.append("Caches cleaned")
+        except Exception as e:
+            print(f"   \033[1;31mError cleaning caches:\033[0m {e}")
+            has_errors = True
 
     if has_errors:
         print("\033[1;31m⚠️  Housekeeping completed with warnings/errors.\033[0m\n")
@@ -190,7 +210,7 @@ def main():
         print("\033[1;32m✨ All clean!\033[0m\n")
         if args.notify:
             notif_msg = " & ".join(summary_messages) if summary_messages else "Done."
-            target_label = f" ({target.capitalize()})" if target in ("screenshots", "downloads") else ""
+            target_label = f" ({target.capitalize()})" if target in ("screenshots", "downloads", "deep", "cache") else ""
             send_macos_notification(f"Mac Housekeeping Complete{target_label}", "Tidied up successfully", notif_msg)
 
 

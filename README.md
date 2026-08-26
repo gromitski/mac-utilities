@@ -8,9 +8,10 @@ A collection of lightweight, portable automation scripts, LaunchAgents, and Alfr
 
 | Utility | Description | Documentation |
 | :--- | :--- | :--- |
-| **`clean`** | Master on-demand CLI & Alfred trigger (`clean`, `clean screenshots`, `clean downloads`, `clean --deep`, `clean -n`). | [Instructions & Details](docs/clean.md) |
+| **`clean`** | Master on-demand CLI & Alfred trigger (`clean`, `clean screenshots`, `clean downloads`, `clean deep`, `clean cache`, `clean -n`). | [Instructions & Details](docs/clean.md) |
 | **Screenshot Housekeeping** | Organizes loose screenshots into daily `YYYY-MM-DD/` folders, purges items older than 14 days to Trash, and permanently protects `Archive/`. | [Instructions & Details](docs/screenshot_housekeeping.md) |
 | **Downloads Housekeeping** | Organizes loose files into rolling 3-month `YYYY-MM/` folders, purges installers after 14 days, and moves expired unzipped folders to `_review/`. | [Instructions & Details](docs/downloads_housekeeping.md) |
+| **System Cache Reclaimer** | Conservative safe disk space reclaimer for Homebrew, npm, pip, and Xcode caches. | [Instructions & Details](docs/system_cache_cleaner.md) |
 
 ---
 
