@@ -1,17 +1,17 @@
 # 🧹 Clean Command & Alfred Trigger (`clean`)
 
-The master on-demand runner that executes housekeeping tasks across **Screenshots**, **Downloads**, **Desktop**, **System Caches**, and **Clipboard URLs** in one command.
+The master housekeeping runner for macOS that organizes files, clears unneeded data, sanitizes text, and frees up disk space across **Screenshots**, **Downloads**, **Desktop**, **App Leftovers**, **Git Branches**, **Clipboard**, **System Caches**, and **URLs**.
 
 ---
 
-## 🎯 Features
+## 🎯 What it Does
 
-* **Universal CLI & Alfred Trigger:** Type `clean` anywhere in Terminal or launch via Alfred.
-* **Interactive Alfred Menu:** Typing `clean` in Alfred shows an instant interactive menu with selectable options.
-* **Standard Cleanup:** Running `clean` tidies **Screenshots, Downloads, and Desktop** in one shot.
-* **Targeted Cleanups:** Run only screenshots, only downloads, only desktop, only deep caches, or only clean copied URLs.
-* **Dry-Run Mode:** Test file actions beforehand with `-n` or `--dry-run`.
-* **Native Notifications:** Displays a macOS notification banner showing exactly which targets were cleaned.
+* **All-in-One Runner:** Type `clean` anywhere in your terminal or launch it from Alfred.
+* **Interactive Alfred Menu:** Typing `clean` in Alfred gives you a searchable menu of every cleanup action.
+* **Standard Cleanup:** Running `clean` by itself tidies your **Screenshots, Downloads, and Desktop** without deleting anything permanently.
+* **Targeted Cleanups:** Run individual commands whenever you want to tidy up a specific folder, flush your clipboard, or clean a copied URL.
+* **Dry-Run Preview:** Add `-n` (or `--dry-run`) to preview exactly what would happen before touching any files.
+* **Desktop Notifications:** Sends a native macOS banner confirming what was completed.
 
 ---
 
