@@ -63,9 +63,9 @@ Then re-run `clean` and click **Allow** when the macOS system dialog appears.
 
 ### Option 2: System Settings Configuration
 1. Open **System Settings > Privacy & Security**.
-2. Navigate to **Files and Folders**.
-3. Ensure **Terminal** (and **Alfred** if used) has **Downloads Folder** and **Desktop Folder** toggled **ON**.
-4. *(Optional)* Alternatively, grant **Full Disk Access** to Terminal for unrestricted management.
+2. Navigate to **Files and Folders** (ensure Terminal/Alfred has Downloads and Desktop toggled ON).
+3. Navigate to **Full Disk Access** and toggle **Terminal** (and **Alfred**) to **ON**.
+   *(Note: Full Disk Access allows Terminal to purge protected, system-restricted, or locked items inside `~/.Trash` silently without macOS blocking permission errors).*
 
 ---
 

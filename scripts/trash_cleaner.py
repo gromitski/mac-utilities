@@ -5,8 +5,8 @@ Trash Cleaner Utility for macOS
 Scans ~/.Trash, reports disk usage, and safely purges items older than a
 configurable age threshold (default: 30 days). Protects recently deleted items.
 
-Uses native macOS Finder AppleScript for 100% reliable scanning and silent
-shell execution (chflags + rm -rf) for zero-dialog GUI popup purges.
+Uses native macOS Finder AppleScript for 100% reliable scanning, and silent
+shell execution (chflags + rm -rf) with graceful TCC permission reporting.
 """
 
 import datetime
@@ -166,24 +166,39 @@ def _silent_purge_item(item_name: str) -> bool:
     Silently unlock and permanently delete a Trash item without Finder GUI dialog popups.
     """
     quoted = shlex.quote(item_name)
-    # Step 1: Remove user-lock flag if set, then rm -rf
+
+    # 1. Direct python removal if accessible
+    item_path = os.path.join(TRASH_DIR, item_name)
+    if os.path.exists(item_path):
+        try:
+            if os.path.islink(item_path) or os.path.isfile(item_path):
+                os.remove(item_path)
+                return True
+            elif os.path.isdir(item_path):
+                shutil.rmtree(item_path, ignore_errors=False)
+                return True
+        except Exception:
+            pass
+
+    # 2. Quiet shell execution with chflags unlock
     shell_cmd = f"chflags -R nouchg ~/.Trash/{quoted} 2>/dev/null; rm -rf ~/.Trash/{quoted}"
     res = subprocess.run(["bash", "-c", shell_cmd], capture_output=True, text=True)
 
-    if res.returncode == 0:
+    if res.returncode == 0 and not os.path.exists(item_path):
         return True
 
-    # Step 2: Fallback to AppleScript do shell script (runs silently without Finder GUI popups)
+    # 3. Fallback to osascript do shell script
     as_cmd = f'do shell script "chflags -R nouchg ~/.Trash/{quoted} 2>/dev/null; rm -rf ~/.Trash/{quoted}"'
     res_as = subprocess.run(["osascript", "-e", as_cmd], capture_output=True, text=True)
-    return res_as.returncode == 0
+
+    return not os.path.exists(item_path)
 
 
 def _empty_via_applescript() -> bool:
     """Empty entire Trash via silent shell execution."""
     cmd = "chflags -R nouchg ~/.Trash/* 2>/dev/null; rm -rf ~/.Trash/* ~/.Trash/.* 2>/dev/null || true"
     res = subprocess.run(["bash", "-c", cmd], capture_output=True, text=True)
-    if res.returncode == 0:
+    if res.returncode == 0 and len(os.listdir(TRASH_DIR)) == 0:
         return True
     as_cmd = f'do shell script "{cmd}"'
     res_as = subprocess.run(["osascript", "-e", as_cmd], capture_output=True, text=True)
@@ -273,7 +288,7 @@ def clean_trash(
             else:
                 print("   ⚠️  Failed to empty Trash.\n")
         else:
-            print(f"   Purging {len(to_purge)} item(s) older than {older_than_days} days silently...")
+            print(f"   Purging {len(to_purge)} item(s) older than {older_than_days} days...")
             failed_count = 0
             for item in to_purge:
                 if _silent_purge_item(item["name"]):
@@ -290,6 +305,14 @@ def clean_trash(
                 print(f"   ✅  Kept {len(kept)} item(s) trashed within the last {older_than_days} days (safe).\n")
             else:
                 print()
+
+            if failed_count > 0:
+                print("──────────────────────────────────────────────────────────────────────────")
+                print(f"⚠️  \033[1;33mmacOS blocked deletion of {failed_count} protected item(s).\033[0m")
+                print("   To allow Terminal to purge protected Trash items, grant Full Disk Access:")
+                print("   1. Open System Settings > Privacy & Security > Full Disk Access")
+                print("   2. Toggle Terminal (and Alfred) to ON")
+                print("──────────────────────────────────────────────────────────────────────────\n")
 
     return reclaimed
 
