@@ -8,16 +8,17 @@ The master on-demand runner that executes housekeeping tasks across **Screenshot
 
 * **Universal CLI & Alfred Trigger:** Type `clean` anywhere in Terminal or launch via Alfred.
 * **Interactive Alfred Menu:** Typing `clean` in Alfred shows an instant interactive menu with selectable options.
+* **Standard Cleanup:** Running `clean` tidies **Screenshots, Downloads, and Desktop** in one shot.
 * **Targeted Cleanups:** Run only screenshots, only downloads, only desktop, only deep caches, or only clean copied URLs.
 * **Dry-Run Mode:** Test file actions beforehand with `-n` or `--dry-run`.
-* **Native Notifications:** Displays a macOS notification banner showing exactly which target was cleaned.
+* **Native Notifications:** Displays a macOS notification banner showing exactly which targets were cleaned.
 
 ---
 
 ## 💻 Terminal CLI Usage
 
 ```bash
-# 1. Standard full cleanup (Screenshots + Downloads)
+# 1. Standard full cleanup (Screenshots + Downloads + Desktop)
 clean
 
 # 2. Clean only Screenshots
@@ -35,7 +36,7 @@ clean url
 clean url "https://blah.com/?a=1&b=2&utm_source=qwaksdb"
 clean "https://blah.com/?a=1&b=2&utm_source=qwaksdb"
 
-# 6. Deep Cleanup (Safe Homebrew, npm, pip & developer caches)
+# 6. Deep Cleanup (Screenshots + Downloads + Desktop + Safe Homebrew/npm/pip Caches)
 clean --deep
 # or
 clean deep
@@ -71,7 +72,7 @@ Surgically removes analytics and ad-tech tracking parameters while **safely pres
 1. Press your Alfred hotkey (e.g. `Cmd + Space`).
 2. Type **`clean`**.
 3. Alfred will immediately display interactive options in the dropdown:
-   * 🧹 **Clean All (Screenshots + Downloads)** ➔ Cleans both folders
+   * 🧹 **Clean All (Screenshots + Downloads + Desktop)** ➔ Cleans all 3 folders
    * 📸 **Clean Screenshots** ➔ Cleans only screenshots
    * 📥 **Clean Downloads** ➔ Cleans only downloads
    * 🖥️ **Clean Desktop** ➔ Sweeps loose desktop items into monthly archive

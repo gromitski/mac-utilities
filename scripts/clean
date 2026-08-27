@@ -5,11 +5,11 @@ Clean - Unified Mac Housekeeping CLI & Alfred Trigger
 Orchestrates screenshot, download, desktop, cache, and clipboard URL housekeeping.
 
 Usage:
-  clean                 Run standard file housekeeping (Screenshots + Downloads)
+  clean                 Run standard file housekeeping (Screenshots + Downloads + Desktop)
   clean screenshots     Run only screenshot housekeeping
   clean downloads       Run only downloads housekeeping
   clean desktop         Run only desktop housekeeping
-  clean deep / --deep   Run Screenshots + Downloads + Safe System Cache Reclaimer
+  clean deep / --deep   Run Screenshots + Downloads + Desktop + Safe System Cache Reclaimer
   clean cache           Run only the safe system cache reclaimer
   clean url [link]      Strip tracking parameters from copied clipboard URL or provided link
   clean --dry-run / -n  Preview actions across all utilities without touching files
@@ -48,8 +48,8 @@ def output_alfred_filter(query: str = ""):
     all_items = [
         {
             "uid": "clean-all",
-            "title": "Clean All (Screenshots + Downloads)",
-            "subtitle": "Organize screenshots into day folders and downloads into monthly archives",
+            "title": "Clean All (Screenshots + Downloads + Desktop)",
+            "subtitle": "Organize screenshots, downloads, and desktop files into structured archives",
             "arg": "all",
             "autocomplete": "all",
             "valid": True,
@@ -73,7 +73,7 @@ def output_alfred_filter(query: str = ""):
         {
             "uid": "clean-desktop",
             "title": "Clean Desktop",
-            "subtitle": "Sweep loose desktop files into monthly archive folder",
+            "subtitle": "Sweep loose desktop files into monthly archive folder (zero deletions)",
             "arg": "desktop",
             "autocomplete": "desktop",
             "valid": True,
@@ -88,8 +88,8 @@ def output_alfred_filter(query: str = ""):
         },
         {
             "uid": "clean-deep",
-            "title": "Clean Deep (Screenshots + Downloads + Cache Reclaimer)",
-            "subtitle": "Full cleanup + safe Homebrew, npm, pip & dev cache purge",
+            "title": "Clean Deep (Files + Cache Reclaimer)",
+            "subtitle": "Screenshots, Downloads, Desktop + safe Homebrew, npm, pip & dev cache purge",
             "arg": "deep",
             "autocomplete": "deep",
             "valid": True,
@@ -246,23 +246,26 @@ def main():
             print(f"   \033[1;31mError organizing downloads:\033[0m {e}")
             has_errors = True
 
-    # 3. Desktop (run for 'desktop')
-    if target == "desktop":
-        print("\033[1;34m🖥️ Cleaning Desktop...\033[0m")
+    # 3. Desktop (run for 'all', 'deep', or 'desktop')
+    if target in ("all", "deep", "desktop"):
+        print("\033[1;34m[3/3] 🖥️ Cleaning Desktop...\033[0m")
         try:
             moved_count = organize_desktop(
                 desktop_dir="~/Desktop",
                 dry_run=args.dry_run,
                 verbose=args.verbose,
             )
-            summary_messages.append(f"Desktop: {moved_count} items organized")
+            if moved_count > 0:
+                summary_messages.append(f"Desktop: {moved_count} items organized")
+            else:
+                summary_messages.append("Desktop clean")
         except Exception as e:
             print(f"   \033[1;31mError organizing desktop:\033[0m {e}")
             has_errors = True
 
     # 4. Safe System Caches (ONLY run if explicitly requested via 'deep' or 'cache')
     if target in ("deep", "cache") or args.deep:
-        print("\033[1;34m[3/3] 🚀 Reclaiming System & Developer Caches...\033[0m")
+        print("\033[1;34m[4/4] 🚀 Reclaiming System & Developer Caches...\033[0m")
         try:
             reclaimed_bytes = clean_system_caches(
                 dry_run=args.dry_run,
