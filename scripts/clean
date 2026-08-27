@@ -2,7 +2,7 @@
 """
 Clean - Unified Mac Housekeeping CLI & Alfred Trigger
 ------------------------------------------------------
-Orchestrates screenshot, download, desktop, app leftovers, cache, and clipboard URL housekeeping.
+Orchestrates screenshot, download, desktop, app leftovers, clipboard, cache, and URL housekeeping.
 
 Usage:
   clean                    Run standard file housekeeping (Screenshots + Downloads + Desktop)
@@ -10,6 +10,9 @@ Usage:
   clean downloads          Run only downloads housekeeping
   clean desktop            Run only desktop housekeeping
   clean app-leftovers      Scan and safely trash orphaned data from uninstalled apps
+  clean clipboard          Instantly wipe clipboard memory (privacy flush)
+  clean clipboard text     Sanitize clipboard text (strip rich formatting & zero-width spaces)
+  clean clipboard status   Inspect clipboard data types and length
   clean deep / --deep      Run Screenshots + Downloads + Desktop + App Leftovers + Caches
   clean cache              Run only the safe system cache reclaimer
   clean url [link]         Strip tracking parameters from copied clipboard URL or provided link
@@ -35,6 +38,7 @@ from desktop_housekeeping import organize_desktop
 from system_cache_cleaner import clean_system_caches, format_bytes
 from url_cleaner import clean_clipboard_url
 from app_leftovers_cleaner import clean_app_leftovers, format_bytes as format_leftover_bytes
+from clipboard_cleaner import clean_clipboard
 
 
 def send_macos_notification(title: str, subtitle: str, message: str):
@@ -89,6 +93,22 @@ def output_alfred_filter(query: str = ""):
             "valid": True,
         },
         {
+            "uid": "clean-clipboard",
+            "title": "Clean Clipboard (Flush / Wipe)",
+            "subtitle": "Instantly clear sensitive passwords, tokens, or private data from memory",
+            "arg": "clipboard",
+            "autocomplete": "clipboard",
+            "valid": True,
+        },
+        {
+            "uid": "clean-clipboard-text",
+            "title": "Clean Clipboard (Plain Text)",
+            "subtitle": "Strip rich styling, smart quotes, and invisible zero-width spaces",
+            "arg": "clipboard text",
+            "autocomplete": "clipboard text",
+            "valid": True,
+        },
+        {
             "uid": "clean-url",
             "title": "Clean URL (Clipboard)",
             "subtitle": "Strip tracking clutter (utm_*, fbclid, si, ref) from copied link",
@@ -136,12 +156,12 @@ def main():
         "target",
         nargs="?",
         default="all",
-        help="Target to clean: 'all' (default), 'screenshots', 'downloads', 'desktop', 'app-leftovers', 'cache', 'deep', 'url', or a direct URL",
+        help="Target to clean: 'all' (default), 'screenshots', 'downloads', 'desktop', 'app-leftovers', 'clipboard', 'cache', 'deep', 'url', or a direct URL",
     )
     parser.add_argument(
         "extra_args",
         nargs="*",
-        help="Optional arguments (e.g. direct URL passed to 'clean url')",
+        help="Optional arguments (e.g. 'text' or 'status' passed to 'clean clipboard', or direct URL passed to 'clean url')",
     )
     parser.add_argument(
         "-n",
@@ -219,6 +239,17 @@ def main():
             print("✓ \033[90mURL was already clean (copied to clipboard).\033[0m\n")
             if args.notify:
                 send_macos_notification("Clean URL", "Already clean (copied to clipboard)", cleaned)
+        return
+
+    # Scenario: Clean Clipboard (Standalone)
+    if target in ("clipboard", "cb"):
+        cb_mode = args.extra_args[0].lower() if args.extra_args else "wipe"
+        success = clean_clipboard(mode=cb_mode, dry_run=args.dry_run, verbose=args.verbose)
+        if args.notify and success and not args.dry_run:
+            if cb_mode in ("text", "plain", "sanitize"):
+                send_macos_notification("Clean Clipboard", "Text Sanitized", "Clean plain text copied to clipboard.")
+            elif cb_mode not in ("status", "info"):
+                send_macos_notification("Clean Clipboard", "Memory Cleared", "Sensitive data wiped from clipboard.")
         return
 
     # Scenario: Clean App Leftovers (Standalone)

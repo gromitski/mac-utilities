@@ -33,23 +33,28 @@ clean desktop
 # 5. Clean orphaned app leftovers
 clean app-leftovers
 
-# 6. Clean URL tracking parameters from clipboard (or direct argument)
+# 6. Clipboard Cleaner (Privacy Flush, Text Sanitizer, Status)
+clean clipboard          # Instant privacy flush (wipes clipboard memory)
+clean clipboard text     # Strips rich styling, smart quotes & zero-width spaces
+clean clipboard status   # Safe metadata inspection (length, types)
+
+# 7. Clean URL tracking parameters from clipboard (or direct argument)
 clean url
 # or pass a link directly:
 clean url "https://blah.com/?a=1&b=2&utm_source=qwaksdb"
 clean "https://blah.com/?a=1&b=2&utm_source=qwaksdb"
 
-# 7. Deep Cleanup (Screenshots + Downloads + Desktop + App Leftovers + Caches)
+# 8. Deep Cleanup (Screenshots + Downloads + Desktop + App Leftovers + Caches)
 clean --deep
 # or
 clean deep
 
-# 8. Preview actions without touching any files
+# 9. Preview actions without touching any files
 clean --dry-run
 # or
 clean -n
 
-# 9. Detailed verbose output
+# 10. Detailed verbose output
 clean -v
 ```
 
@@ -80,9 +85,11 @@ Surgically removes analytics and ad-tech tracking parameters while **safely pres
    * 📥 **Clean Downloads** ➔ Cleans only downloads
    * 🖥️ **Clean Desktop** ➔ Sweeps loose desktop items into monthly archive
    * 👻 **Clean App Leftovers** ➔ Safely trashes orphaned uninstalled app support data
+   * 📋 **Clean Clipboard (Flush / Wipe)** ➔ Clears passwords & sensitive data from memory
+   * 📝 **Clean Clipboard (Plain Text)** ➔ Sanitizes copied text (removes HTML/RTF, smart quotes)
    * 🔗 **Clean URL (Clipboard)** ➔ Strips tracking clutter from copied link
    * 🚀 **Clean Deep** ➔ Runs full cleanup + app leftovers + developer cache purges
-4. Select with arrow keys or type `clean desktop`, `clean url`, `clean screenshots`, `clean downloads` directly and hit **Enter**.
+4. Select with arrow keys or type `clean desktop`, `clean clipboard`, `clean url`, `clean screenshots` directly and hit **Enter**.
 5. You'll receive a native macOS notification confirming what was cleaned.
 
 ### Restoring Alfred Workflow on a New Mac
