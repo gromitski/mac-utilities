@@ -38,23 +38,27 @@ clean clipboard          # Instant privacy flush (wipes clipboard memory)
 clean clipboard text     # Strips rich styling, smart quotes & zero-width spaces
 clean clipboard status   # Safe metadata inspection (length, types)
 
-# 7. Clean URL tracking parameters from clipboard (or direct argument)
+# 7. Git Branch Cleaner (Standalone on-demand only)
+clean branches           # Prune merged & dead branches in current repo
+clean branches --all     # Scan all repos across workspace for stale branches
+
+# 8. Clean URL tracking parameters from clipboard (or direct argument)
 clean url
 # or pass a link directly:
 clean url "https://blah.com/?a=1&b=2&utm_source=qwaksdb"
 clean "https://blah.com/?a=1&b=2&utm_source=qwaksdb"
 
-# 8. Deep Cleanup (Screenshots + Downloads + Desktop + App Leftovers + Caches)
+# 9. Deep Cleanup (Screenshots + Downloads + Desktop + App Leftovers + Caches)
 clean --deep
 # or
 clean deep
 
-# 9. Preview actions without touching any files
+# 10. Preview actions without touching any files
 clean --dry-run
 # or
 clean -n
 
-# 10. Detailed verbose output
+# 11. Detailed verbose output
 clean -v
 ```
 
@@ -85,6 +89,7 @@ Surgically removes analytics and ad-tech tracking parameters while **safely pres
    * 📥 **Clean Downloads** ➔ Cleans only downloads
    * 🖥️ **Clean Desktop** ➔ Sweeps loose desktop items into monthly archive
    * 👻 **Clean App Leftovers** ➔ Safely trashes orphaned uninstalled app support data
+   * 🌿 **Clean Git Branches** ➔ Prunes merged and dead remote-tracking branches
    * 📋 **Clean Clipboard (Flush / Wipe)** ➔ Clears passwords & sensitive data from memory
    * 📝 **Clean Clipboard (Plain Text)** ➔ Sanitizes copied text (removes HTML/RTF, smart quotes)
    * 🔗 **Clean URL (Clipboard)** ➔ Strips tracking clutter from copied link

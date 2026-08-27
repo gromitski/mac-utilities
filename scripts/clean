@@ -2,7 +2,7 @@
 """
 Clean - Unified Mac Housekeeping CLI & Alfred Trigger
 ------------------------------------------------------
-Orchestrates screenshot, download, desktop, app leftovers, clipboard, cache, and URL housekeeping.
+Orchestrates screenshot, download, desktop, app leftovers, clipboard, branches, cache, and URL housekeeping.
 
 Usage:
   clean                    Run standard file housekeeping (Screenshots + Downloads + Desktop)
@@ -13,6 +13,8 @@ Usage:
   clean clipboard          Instantly wipe clipboard memory (privacy flush)
   clean clipboard text     Sanitize clipboard text (strip rich formatting & zero-width spaces)
   clean clipboard status   Inspect clipboard data types and length
+  clean branches           Prune merged and dead Git branches in current repo
+  clean branches --all     Audit stale branches across all workspace repositories
   clean deep / --deep      Run Screenshots + Downloads + Desktop + App Leftovers + Caches
   clean cache              Run only the safe system cache reclaimer
   clean url [link]         Strip tracking parameters from copied clipboard URL or provided link
@@ -39,6 +41,7 @@ from system_cache_cleaner import clean_system_caches, format_bytes
 from url_cleaner import clean_clipboard_url
 from app_leftovers_cleaner import clean_app_leftovers, format_bytes as format_leftover_bytes
 from clipboard_cleaner import clean_clipboard
+from git_branch_cleaner import clean_branches_in_repo, scan_workspace as scan_branches_workspace
 
 
 def send_macos_notification(title: str, subtitle: str, message: str):
@@ -90,6 +93,14 @@ def output_alfred_filter(query: str = ""):
             "subtitle": "Safely find and clean orphaned support data from uninstalled apps",
             "arg": "app-leftovers",
             "autocomplete": "app-leftovers",
+            "valid": True,
+        },
+        {
+            "uid": "clean-branches",
+            "title": "Clean Git Branches",
+            "subtitle": "Safely prune merged and dead remote-tracking branches in current repo",
+            "arg": "branches",
+            "autocomplete": "branches",
             "valid": True,
         },
         {
@@ -156,18 +167,30 @@ def main():
         "target",
         nargs="?",
         default="all",
-        help="Target to clean: 'all' (default), 'screenshots', 'downloads', 'desktop', 'app-leftovers', 'clipboard', 'cache', 'deep', 'url', or a direct URL",
+        help="Target to clean: 'all' (default), 'screenshots', 'downloads', 'desktop', 'app-leftovers', 'branches', 'clipboard', 'cache', 'deep', 'url', or a direct URL",
     )
     parser.add_argument(
         "extra_args",
         nargs="*",
-        help="Optional arguments (e.g. 'text' or 'status' passed to 'clean clipboard', or direct URL passed to 'clean url')",
+        help="Optional arguments (e.g. 'text' or 'status' for clipboard, '--all' for branches, or a direct URL for url cleaner)",
     )
     parser.add_argument(
         "-n",
         "--dry-run",
         action="store_true",
         help="Simulate actions without moving files or trashing anything",
+    )
+    parser.add_argument(
+        "-f",
+        "--force",
+        action="store_true",
+        help="Bypass interactive confirmation prompts",
+    )
+    parser.add_argument(
+        "-a",
+        "--all",
+        action="store_true",
+        help="Target all items or workspace repositories (e.g. 'clean branches --all')",
     )
     parser.add_argument(
         "-v",
@@ -241,6 +264,26 @@ def main():
                 send_macos_notification("Clean URL", "Already clean (copied to clipboard)", cleaned)
         return
 
+    # Scenario: Clean Git Branches (Standalone ONLY - Never in automated clean or clean deep)
+    if target in ("branches", "branch"):
+        force_mode = args.force or "--force" in args.extra_args or "-f" in args.extra_args
+        all_mode = args.all or "--all" in args.extra_args or "-a" in args.extra_args or (len(args.extra_args) > 0 and args.extra_args[0].lower() == "all")
+        if all_mode:
+            scan_branches_workspace()
+        else:
+            repo_target = "."
+            if args.extra_args and not args.extra_args[0].startswith("-") and args.extra_args[0].lower() != "all":
+                repo_target = args.extra_args[0]
+            deleted = clean_branches_in_repo(
+                repo_path=repo_target,
+                dry_run=args.dry_run,
+                force=force_mode,
+                verbose=args.verbose,
+            )
+            if args.notify and not args.dry_run and deleted > 0:
+                send_macos_notification("Clean Git Branches", "Branches Pruned", f"Deleted {deleted} stale local branch(es).")
+        return
+
     # Scenario: Clean Clipboard (Standalone)
     if target in ("clipboard", "cb"):
         cb_mode = args.extra_args[0].lower() if args.extra_args else "wipe"
@@ -254,7 +297,7 @@ def main():
 
     # Scenario: Clean App Leftovers (Standalone)
     if target in ("app-leftovers", "leftovers", "app_leftovers"):
-        force_mode = "--force" in args.extra_args or "-f" in args.extra_args
+        force_mode = args.force or "--force" in args.extra_args or "-f" in args.extra_args
         reclaimed = clean_app_leftovers(
             dry_run=args.dry_run,
             force=force_mode,
