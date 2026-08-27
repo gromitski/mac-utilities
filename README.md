@@ -2,6 +2,8 @@
 
 A collection of lightweight, portable automation scripts, LaunchAgents, and Alfred workflows for macOS.
 
+> 💡 **Alfred is Non-Essential:** All utilities in this repository are **100% standalone command-line tools**. Alfred is purely an optional convenience shortcut for users who use it—if you don't use Alfred, every single command works fully out of the box directly from your Terminal!
+
 ---
 
 ## 🛠 Available Utilities
@@ -30,9 +32,9 @@ git clone https://github.com/gromitski/mac-utilities.git ~/utilities
 cd ~/utilities && ./install.sh
 
 # 3. Reload your shell
-source ~/.zshrc
+source ~/.zshrc   # or source ~/.bash_profile / source ~/.config/fish/config.fish
 
-# 4. (Optional) Install the Alfred Workflow
+# 4. (Optional) Install the Alfred Workflow if you use Alfred
 open ~/utilities/alfred/Clean.alfredworkflow
 ```
 
@@ -50,7 +52,7 @@ macOS caches permission tokens per application session. If Terminal or Alfred ha
 # Reset permission prompt for Terminal
 tccutil reset SystemPolicyDownloadsFolder com.apple.Terminal
 
-# Or reset permission prompt for Alfred
+# Or reset permission prompt for Alfred (if installed)
 tccutil reset SystemPolicyDownloadsFolder com.runningwithcrayons.Alfred
 ```
 Then re-run `clean` and click **Allow** when the macOS system dialog appears.
@@ -58,8 +60,8 @@ Then re-run `clean` and click **Allow** when the macOS system dialog appears.
 ### Option 2: System Settings Configuration
 1. Open **System Settings > Privacy & Security**.
 2. Navigate to **Files and Folders**.
-3. Ensure **Terminal** and **Alfred** have **Downloads Folder** toggled **ON**.
-4. *(Optional)* Alternatively, grant **Full Disk Access** to Terminal and Alfred for unrestricted management.
+3. Ensure **Terminal** (and **Alfred** if used) has **Downloads Folder** toggled **ON**.
+4. *(Optional)* Alternatively, grant **Full Disk Access** to Terminal for unrestricted management.
 
 ---
 
@@ -75,3 +77,9 @@ Then re-run `clean` and click **Allow** when the macOS system dialog appears.
    git commit -m "Add my_tool"
    git push
    ```
+
+---
+
+## 📄 License
+
+This project is licensed under the [MIT License](LICENSE).
