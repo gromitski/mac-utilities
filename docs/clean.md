@@ -30,30 +30,23 @@ clean downloads
 # 4. Clean only Desktop
 clean desktop
 
-# 5. Smart Trash Purge (items older than 30 days)
-clean trash            # Purge items trashed >30 days ago
-clean trash status     # Show Trash size summary without deleting
-clean trash -n         # Preview what would be purged
-clean trash 14d        # Purge with a custom retention threshold
-clean trash all        # Empty entire Trash
-
-# 6. Clean URL tracking parameters from clipboard (or direct argument)
+# 5. Clean URL tracking parameters from clipboard (or direct argument)
 clean url
 # or pass a link directly:
 clean url "https://blah.com/?a=1&b=2&utm_source=qwaksdb"
 clean "https://blah.com/?a=1&b=2&utm_source=qwaksdb"
 
-# 7. Deep Cleanup (Screenshots + Downloads + Desktop + Trash >30d + Caches)
+# 6. Deep Cleanup (Screenshots + Downloads + Desktop + Caches)
 clean --deep
 # or
 clean deep
 
-# 8. Preview actions without touching any files
+# 7. Preview actions without touching any files
 clean --dry-run
 # or
 clean -n
 
-# 9. Detailed verbose output
+# 8. Detailed verbose output
 clean -v
 ```
 
@@ -83,9 +76,8 @@ Surgically removes analytics and ad-tech tracking parameters while **safely pres
    * 📸 **Clean Screenshots** ➔ Cleans only screenshots
    * 📥 **Clean Downloads** ➔ Cleans only downloads
    * 🖥️ **Clean Desktop** ➔ Sweeps loose desktop items into monthly archive
-   * 🗑️ **Clean Trash (Items >30 Days)** ➔ Purges aged Trash items, reclaims disk space
    * 🔗 **Clean URL (Clipboard)** ➔ Strips tracking clutter from copied link
-   * 🚀 **Clean Deep** ➔ Runs full cleanup + Trash purge (>30d) + cache purges
+   * 🚀 **Clean Deep** ➔ Runs full cleanup + safe developer cache purges
 4. Select with arrow keys or type `clean desktop`, `clean url`, `clean screenshots`, `clean downloads` directly and hit **Enter**.
 5. You'll receive a native macOS notification confirming what was cleaned.
 

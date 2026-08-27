@@ -2,17 +2,14 @@
 """
 Clean - Unified Mac Housekeeping CLI & Alfred Trigger
 ------------------------------------------------------
-Orchestrates screenshot, download, desktop, trash, cache, and clipboard URL housekeeping.
+Orchestrates screenshot, download, desktop, cache, and clipboard URL housekeeping.
 
 Usage:
   clean                    Run standard file housekeeping (Screenshots + Downloads + Desktop)
   clean screenshots        Run only screenshot housekeeping
   clean downloads          Run only downloads housekeeping
   clean desktop            Run only desktop housekeeping
-  clean trash [30d]        Purge Trash items older than threshold (default 30 days)
-  clean trash status       Show Trash disk usage summary without deleting anything
-  clean trash all          Empty entire Trash
-  clean deep / --deep      Run Screenshots + Downloads + Desktop + Trash (>30d) + Caches
+  clean deep / --deep      Run Screenshots + Downloads + Desktop + Caches
   clean cache              Run only the safe system cache reclaimer
   clean url [link]         Strip tracking parameters from copied clipboard URL or provided link
   clean --dry-run / -n     Preview actions across all utilities without touching files
@@ -36,7 +33,6 @@ from downloads_housekeeping import organize_downloads
 from desktop_housekeeping import organize_desktop
 from system_cache_cleaner import clean_system_caches, format_bytes
 from url_cleaner import clean_clipboard_url
-from trash_cleaner import clean_trash, scan_trash, print_status as print_trash_status, _format_bytes as fmt_bytes
 
 
 def send_macos_notification(title: str, subtitle: str, message: str):
@@ -83,14 +79,6 @@ def output_alfred_filter(query: str = ""):
             "valid": True,
         },
         {
-            "uid": "clean-trash",
-            "title": "Clean Trash (Items >30 Days)",
-            "subtitle": "Permanently purge Trash items older than 30 days, keeping recent deletions safe",
-            "arg": "trash",
-            "autocomplete": "trash",
-            "valid": True,
-        },
-        {
             "uid": "clean-url",
             "title": "Clean URL (Clipboard)",
             "subtitle": "Strip tracking clutter (utm_*, fbclid, si, ref) from copied link",
@@ -100,8 +88,8 @@ def output_alfred_filter(query: str = ""):
         },
         {
             "uid": "clean-deep",
-            "title": "Clean Deep (Files + Trash + Cache Reclaimer)",
-            "subtitle": "Screenshots, Downloads, Desktop, Trash (>30d) + safe Homebrew, npm, pip & dev cache purge",
+            "title": "Clean Deep (Files + Cache Reclaimer)",
+            "subtitle": "Screenshots, Downloads, Desktop + safe Homebrew, npm, pip & dev cache purge",
             "arg": "deep",
             "autocomplete": "deep",
             "valid": True,
@@ -223,30 +211,11 @@ def main():
                 send_macos_notification("Clean URL", "Already clean (copied to clipboard)", cleaned)
         return
 
-    # Scenario: Clean Trash (Standalone utility; also wired into 'deep')
-    if target == "trash":
-        trash_mode = args.extra_args[0].lower() if args.extra_args else "30d"
-        import re as _re
-        if trash_mode == "status":
-            items = scan_trash()
-            print_trash_status(items)
-        elif trash_mode in ("all", "empty", "--empty"):
-            clean_trash(empty_all=True, dry_run=args.dry_run, verbose=args.verbose)
-            if args.notify:
-                send_macos_notification("Clean Trash", "Emptied", "All Trash items permanently deleted.")
-        else:
-            match = _re.match(r"^(\d+)d?$", trash_mode)
-            days = int(match.group(1)) if match else 30
-            reclaimed = clean_trash(older_than_days=days, dry_run=args.dry_run, verbose=args.verbose)
-            if args.notify and not args.dry_run:
-                send_macos_notification("Clean Trash", f"Purged items >{days}d", f"Reclaimed {fmt_bytes(reclaimed)}")
-        return
-
     # Standard File & System Housekeeping
     mode_str = " (DRY-RUN)" if args.dry_run else ""
     deep = target == "deep" or args.deep
     # Calculate step count
-    step_total = 3 if not deep else 5
+    step_total = 3 if not deep else 4
     step = 0
 
     print(f"\n🧹 \033[1mStarting Mac Housekeeping{mode_str}...\033[0m\n")
@@ -302,21 +271,7 @@ def main():
             print(f"   \033[1;31mError organizing desktop:\033[0m {e}")
             has_errors = True
 
-    # 4. Trash (ONLY in 'deep')
-    if deep:
-        step += 1
-        print(f"\033[1;34m[{step}/{step_total}] 🗑️  Purging Aged Trash (>30 days)...\033[0m")
-        try:
-            reclaimed = clean_trash(older_than_days=30, dry_run=args.dry_run, verbose=args.verbose)
-            if not args.dry_run and reclaimed > 0:
-                summary_messages.append(f"Trash: reclaimed {fmt_bytes(reclaimed)}")
-            else:
-                summary_messages.append("Trash purged (>30d)")
-        except Exception as e:
-            print(f"   \033[1;31mError purging trash:\033[0m {e}")
-            has_errors = True
-
-    # 5. Safe System Caches (ONLY in 'deep' or 'cache')
+    # 4. Safe System Caches (ONLY in 'deep' or 'cache')
     if target in ("deep", "cache") or args.deep:
         step += 1
         print(f"\033[1;34m[{step}/{step_total}] 🚀 Reclaiming System & Developer Caches...\033[0m")
@@ -341,7 +296,7 @@ def main():
         print("\033[1;32m✨ All clean!\033[0m\n")
         if args.notify:
             notif_msg = " & ".join(summary_messages) if summary_messages else "Done."
-            target_label = f" ({target.capitalize()})" if target in ("screenshots", "downloads", "desktop", "trash", "deep", "cache") else ""
+            target_label = f" ({target.capitalize()})" if target in ("screenshots", "downloads", "desktop", "deep", "cache") else ""
             send_macos_notification(f"Mac Housekeeping Complete{target_label}", "Tidied up successfully", notif_msg)
 
 

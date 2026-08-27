@@ -10,14 +10,13 @@ A collection of lightweight, portable automation scripts, LaunchAgents, and Alfr
 
 | Utility | Description | Documentation |
 | :--- | :--- | :--- |
-| **`clean`** | Master on-demand CLI & Alfred trigger (`clean`, `clean screenshots`, `clean downloads`, `clean desktop`, `clean trash`, `clean url`, `clean deep`, `clean -n`). | [Instructions & Details](docs/clean.md) |
+| **`clean`** | Master on-demand CLI & Alfred trigger (`clean`, `clean screenshots`, `clean downloads`, `clean desktop`, `clean url`, `clean deep`, `clean -n`). | [Instructions & Details](docs/clean.md) |
 | **`git-audit`** | Fast multi-threaded scanner checking uncommitted changes, unpushed commits, and branch sync across all workspace repos. | [Instructions & Details](docs/git_audit.md) |
 | **`localserver`** | Spins up a local Wi-Fi HTTP server and prints a terminal QR code for instant mobile testing/sharing. | [Instructions & Details](docs/localserver.md) |
 | **`awake`** | Friendly timed sleep & display inhibitor for presentations, downloads, and calls (`awake 30m`, `awake 1h`, `awake off`). | [Instructions & Details](docs/awake.md) |
 | **Screenshot Housekeeping** | Organizes loose screenshots into daily `YYYY-MM-DD/` folders, purges items older than 14 days to Trash, and permanently protects `Archive/`. | [Instructions & Details](docs/screenshot_housekeeping.md) |
 | **Downloads Housekeeping** | Organizes loose files into rolling 3-month `YYYY-MM/` folders, purges installers after 14 days, and moves expired unzipped folders to `_review/`. | [Instructions & Details](docs/downloads_housekeeping.md) |
 | **Desktop Housekeeping** | Sweeps loose desktop files into monthly `YYYY-MM/` folders without deleting anything. | [Instructions & Details](docs/desktop_housekeeping.md) |
-| **Smart Trash Purge** | Purges Trash items older than 30 days (configurable), shows disk usage summary, and supports full empty. | [Instructions & Details](docs/trash_cleaner.md) |
 | **System Cache Reclaimer** | Conservative safe disk space reclaimer for Homebrew, npm, pip, and Xcode caches. | [Instructions & Details](docs/system_cache_cleaner.md) |
 
 ---
@@ -64,8 +63,7 @@ Then re-run `clean` and click **Allow** when the macOS system dialog appears.
 ### Option 2: System Settings Configuration
 1. Open **System Settings > Privacy & Security**.
 2. Navigate to **Files and Folders** (ensure Terminal/Alfred has Downloads and Desktop toggled ON).
-3. Navigate to **Full Disk Access** and toggle **Terminal** (and **Alfred**) to **ON**.
-   *(Note: Full Disk Access allows Terminal to purge protected, system-restricted, or locked items inside `~/.Trash` silently without macOS blocking permission errors).*
+3. Optionally, navigate to **Full Disk Access** and toggle **Terminal** (and **Alfred**) to **ON**.
 
 ---
 
