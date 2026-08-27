@@ -18,27 +18,21 @@ A collection of lightweight, portable automation scripts, LaunchAgents, and Alfr
 
 ---
 
-## 🚀 Quick Setup on a New Mac
+## 🚀 Quick Setup on Any Mac
 
-To restore and activate all utilities on a new or fresh Mac:
+To install and activate all utilities on a new or fresh Mac:
 
 ```bash
-# 1. Clone this repository
-git clone git@github.com:gromitski/mac-utilities.git ~/utilities
+# 1. Clone the repository into ~/utilities
+git clone https://github.com/gromitski/mac-utilities.git ~/utilities
 
-# 2. Add scripts to PATH in ~/.zshrc
-echo 'export PATH="$HOME/utilities/scripts:$PATH"' >> ~/.zshrc
+# 2. Run the automated installer
+cd ~/utilities && ./install.sh
+
+# 3. Reload your shell
 source ~/.zshrc
 
-# 3. Make all scripts executable
-chmod +x ~/utilities/scripts/*
-
-# 4. Install and load automated daily schedules (launchd)
-cp ~/utilities/launchd/*.plist ~/Library/LaunchAgents/
-launchctl load ~/Library/LaunchAgents/com.gromitski.screenshot-housekeeping.plist
-launchctl load ~/Library/LaunchAgents/com.gromitski.downloads-housekeeping.plist
-
-# 5. (Optional) Install Alfred Workflow
+# 4. (Optional) Install the Alfred Workflow
 open ~/utilities/alfred/Clean.alfredworkflow
 ```
 
@@ -50,7 +44,7 @@ open ~/utilities/alfred/Clean.alfredworkflow
 ## ➕ Adding New Utilities
 
 1. Place your script in `scripts/` (e.g. `scripts/my_tool.py`).
-2. If it requires background scheduling, add its `.plist` to `launchd/`.
+2. If it requires background scheduling, add its template `.plist` to `launchd/`.
 3. Create a detailed documentation file in `docs/` (e.g. `docs/my_tool.md`).
 4. Add a one-sentence summary and link to the table above.
 5. Commit and push:

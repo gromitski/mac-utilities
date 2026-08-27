@@ -1,63 +1,65 @@
 # 📥 Downloads Housekeeping (`downloads_housekeeping.py`)
 
-Automatically organizes `~/Downloads` into monthly archives, eliminates old installer clutter, and protects unzipped project folders.
+Automated organizer and cleanup utility for your macOS `~/Downloads` folder.
 
 ---
 
-## 🎯 How It Works
+## 🎯 What It Does
 
-1. **Immediate Monthly Organization:** All loose files and unzipped directories in `~/Downloads/` are organized into their corresponding monthly archive folders (`YYYY-MM/`).
-2. **Seamless Appending:** If a monthly folder (e.g. `2026-08/`) already exists, new downloads are safely added into it without errors or conflicts.
-3. **14-Day Installer Purge:** Old installer files (`.dmg`, `.pkg`, `.iso`, and `*_installer.app`) older than 14 days are automatically moved to the **macOS Trash** (`~/.Trash`).
-4. **3-Month Expiry & Review Protection:**
-   - When a monthly folder reaches > 3 months old, loose files inside are moved to the Trash.
-   - Any **unzipped or custom project folders** inside expired months are moved safely to `~/Downloads/_review/` so you can manually review them rather than risking accidental deletion.
-5. **Protected Folders:** The `_review/` directory and active monthly folders are protected from being sorted or deleted.
+1. **Immediate Monthly Grouping:** Organizes loose downloads into monthly archive folders (`YYYY-MM/`).
+2. **14-Day Installer Purge:** Automatically moves installer files (`.dmg`, `.pkg`, `.iso`, and `*_installer.app`) older than 14 days directly to `~/.Trash`.
+3. **Safe 3-Month Expiry:** For monthly archive folders older than 3 months (~90 days):
+   * Loose files are moved to `~/.Trash`.
+   * Unzipped and custom directories are safely preserved and moved to `~/Downloads/_review/` so you can manually review projects or archives before deleting.
+4. **Automated Daily Schedule:** Runs automatically every night at 23:59 via a macOS LaunchAgent.
 
 ---
 
-## 💻 Manual CLI Usage & Flags
-
-The script can be run manually at any time:
+## 💻 Manual CLI Usage
 
 ```bash
-# Preview what would be moved or trashed without making any changes
+# 1. Run via master clean tool (recommended)
+clean downloads
+
+# 2. Preview actions without touching any files
+clean downloads -n
+
+# 3. Run standalone script
+python3 ~/utilities/scripts/downloads_housekeeping.py
+
+# 4. Standalone dry-run
 python3 ~/utilities/scripts/downloads_housekeeping.py --dry-run
-
-# Run with verbose, item-by-item output
-python3 ~/utilities/scripts/downloads_housekeeping.py -v
-
-# Custom retention thresholds
-python3 ~/utilities/scripts/downloads_housekeeping.py --installers-days 14 --months 3
 ```
 
 ---
 
-## ⏰ Automated Scheduling (`launchd`)
+## ⏰ Automated Background Schedule (LaunchAgent)
 
-The script is scheduled via a native macOS LaunchAgent:
+* **Plist Path:** `~/Library/LaunchAgents/com.mac-utilities.downloads-housekeeping.plist`
+* **Schedule:** Daily at **23:59**
+* **Logs:** `~/Library/Logs/downloads_housekeeping.log`
 
-* **Plist Path:** `~/Library/LaunchAgents/com.gromitski.downloads-housekeeping.plist`
-* **Schedule:** Runs daily at **23:59** (and catches up automatically upon waking if your Mac was asleep).
-* **Logs:** Recorded to `~/Library/Logs/downloads_housekeeping.log`.
-
----
-
-## 🔄 Setup on a New Mac
-
+### Managing the LaunchAgent:
 ```bash
-cp ~/utilities/launchd/com.gromitski.downloads-housekeeping.plist ~/Library/LaunchAgents/
-launchctl load ~/Library/LaunchAgents/com.gromitski.downloads-housekeeping.plist
+# Check if loaded
+launchctl list | grep mac-utilities
+
+# Reload LaunchAgent
+launchctl unload ~/Library/LaunchAgents/com.mac-utilities.downloads-housekeeping.plist
+launchctl load ~/Library/LaunchAgents/com.mac-utilities.downloads-housekeeping.plist
 ```
 
 ---
 
 ## 🛠 Troubleshooting: macOS Privacy & Permissions (`Operation not permitted`)
 
-If the script encounters `PermissionError: [Errno 1] Operation not permitted: '~/Downloads'`:
+macOS protects `~/Downloads` via Transparency, Consent, and Control (TCC).
 
-```bash
-# Reset permission cache so macOS prompts you fresh:
-tccutil reset SystemPolicyDownloadsFolder com.apple.Terminal
-```
-Then re-run the command and click **Allow** on the macOS system dialog.
+If Terminal reports `[Permission Error] macOS blocked access to '~/Downloads'`:
+
+1. **Reset permission cache:**
+   ```bash
+   tccutil reset SystemPolicyDownloadsFolder com.apple.Terminal
+   ```
+2. Re-run `clean` or `clean downloads` and click **Allow** when the macOS prompt appears.
+3. Alternatively, grant Terminal access in **System Settings > Privacy & Security > Files and Folders > Terminal**.

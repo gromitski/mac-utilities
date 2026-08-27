@@ -3,11 +3,11 @@
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.gromitski.downloads-housekeeping</string>
+    <string>com.mac-utilities.downloads-housekeeping</string>
     <key>ProgramArguments</key>
     <array>
         <string>/usr/bin/python3</string>
-        <string>/Users/gromitski/utilities/scripts/downloads_housekeeping.py</string>
+        <string>__HOME__/utilities/scripts/downloads_housekeeping.py</string>
     </array>
     <key>StartCalendarInterval</key>
     <dict>
@@ -17,8 +17,8 @@
         <integer>59</integer>
     </dict>
     <key>StandardOutPath</key>
-    <string>/Users/gromitski/Library/Logs/downloads_housekeeping.log</string>
+    <string>__HOME__/Library/Logs/downloads_housekeeping.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/gromitski/Library/Logs/downloads_housekeeping.log</string>
+    <string>__HOME__/Library/Logs/downloads_housekeeping.log</string>
 </dict>
 </plist>
