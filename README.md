@@ -36,8 +36,30 @@ source ~/.zshrc
 open ~/utilities/alfred/Clean.alfredworkflow
 ```
 
-> **Note on Permissions:** If macOS ever blocks terminal access to Downloads (`Operation not permitted`), reset the permission cache by running:  
-> `tccutil reset SystemPolicyDownloadsFolder com.apple.Terminal` and click **Allow**.
+---
+
+## 🔐 macOS Permissions & Troubleshooting (`Operation not permitted`)
+
+macOS restricts access to protected folders (`~/Downloads`, `~/Documents`, `~/Desktop`) through **Transparency, Consent, and Control (TCC)**.
+
+If running any housekeeping command returns `[Permission Error] Operation not permitted`:
+
+### Option 1: Quick Terminal Cache Reset (Recommended)
+macOS caches permission tokens per application session. If Terminal or Alfred has a stale permission token:
+```bash
+# Reset permission prompt for Terminal
+tccutil reset SystemPolicyDownloadsFolder com.apple.Terminal
+
+# Or reset permission prompt for Alfred
+tccutil reset SystemPolicyDownloadsFolder com.runningwithcrayons.Alfred
+```
+Then re-run `clean` and click **Allow** when the macOS system dialog appears.
+
+### Option 2: System Settings Configuration
+1. Open **System Settings > Privacy & Security**.
+2. Navigate to **Files and Folders**.
+3. Ensure **Terminal** and **Alfred** have **Downloads Folder** toggled **ON**.
+4. *(Optional)* Alternatively, grant **Full Disk Access** to Terminal and Alfred for unrestricted management.
 
 ---
 
