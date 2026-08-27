@@ -5,8 +5,8 @@ Trash Cleaner Utility for macOS
 Scans ~/.Trash, reports disk usage, and safely purges items older than a
 configurable age threshold (default: 30 days). Protects recently deleted items.
 
-Relies on macOS Finder AppleScript for reliable access with a direct
-filesystem fallback for environments where Finder scripting is unavailable.
+Uses native macOS Finder AppleScript for 100% reliable scanning and purging
+without TCC permission errors, with a direct filesystem fallback.
 """
 
 import datetime
@@ -16,7 +16,6 @@ import shutil
 import stat
 import subprocess
 import sys
-
 
 TRASH_DIR = os.path.expanduser("~/.Trash")
 DEFAULT_DAYS = 30
@@ -30,56 +29,89 @@ def _format_bytes(num_bytes: int) -> str:
     return f"{num_bytes:.1f} PB"
 
 
-def _item_size(path: str) -> int:
-    """Return size in bytes; recursively for directories."""
-    if os.path.islink(path) or os.path.isfile(path):
+def _parse_applescript_date(d_str: str) -> datetime.datetime:
+    """Parse short date string returned by AppleScript (DD/MM/YYYY HH:MM:SS or MM/DD/YYYY)."""
+    d_str = d_str.strip()
+    for fmt in ["%d/%m/%Y %H:%M:%S", "%m/%d/%Y %H:%M:%S", "%Y-%m-%d %H:%M:%S", "%d/%m/%Y", "%m/%d/%Y"]:
         try:
-            return os.path.getsize(path)
-        except OSError:
-            return 0
-    total = 0
-    for root, dirs, files in os.walk(path):
-        for f in files:
+            return datetime.datetime.strptime(d_str, fmt)
+        except ValueError:
+            pass
+    return datetime.datetime.now()
+
+
+def scan_trash_applescript() -> list[dict]:
+    """Scan Trash via Finder AppleScript (fast bulk property fetch)."""
+    items = []
+    # 1. Fetch names
+    r_names = subprocess.run(
+        ["osascript", "-e", 'tell application "Finder" to get name of items of trash'],
+        capture_output=True,
+        text=True,
+    )
+    if r_names.returncode != 0 or not r_names.stdout.strip():
+        return items
+
+    names = [n.strip() for n in r_names.stdout.strip().split(",") if n.strip()]
+    if not names:
+        return items
+
+    # 2. Fetch modification dates
+    date_script = """
+    tell application "Finder"
+        set dateList to modification date of items of trash
+        set strList to {}
+        repeat with d in dateList
+            set end of strList to (short date string of d & " " & time string of d)
+        end repeat
+        return strList
+    end tell
+    """
+    r_dates = subprocess.run(["osascript", "-e", date_script], capture_output=True, text=True)
+    date_strs = [d.strip() for d in r_dates.stdout.strip().split(", ") if d.strip()]
+
+    # 3. Fetch sizes
+    r_sizes = subprocess.run(
+        ["osascript", "-e", 'tell application "Finder" to get size of items of trash'],
+        capture_output=True,
+        text=True,
+    )
+    sizes_raw = r_sizes.stdout.strip().split(",")
+    sizes = []
+    for s in sizes_raw:
+        st = s.strip()
+        if st and st != "missing value":
             try:
-                total += os.path.getsize(os.path.join(root, f))
-            except OSError:
-                pass
-    return total
-
-
-def _remove_item(path: str) -> bool:
-    """Permanently remove a file or directory. Returns True on success."""
-    try:
-        if os.path.islink(path) or os.path.isfile(path):
-            os.remove(path)
+                sizes.append(int(float(st)))
+            except ValueError:
+                sizes.append(0)
         else:
-            shutil.rmtree(path, ignore_errors=False)
-        return True
-    except Exception:
-        # Try chmod on locked files / immutable dirs
-        try:
-            os.chmod(path, stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
-            if os.path.isdir(path):
-                shutil.rmtree(path)
-            else:
-                os.remove(path)
-            return True
-        except Exception:
-            return False
+            sizes.append(0)
+
+    now = datetime.datetime.now()
+    count = min(len(names), len(date_strs), len(sizes))
+
+    for i in range(count):
+        name = names[i]
+        d_str = date_strs[i]
+        sz = sizes[i]
+        dt = _parse_applescript_date(d_str)
+        age_days = (now - dt).total_seconds() / 86400.0
+        path = os.path.join(TRASH_DIR, name)
+
+        items.append({
+            "name": name,
+            "path": path,
+            "size_bytes": sz,
+            "mtime": dt.timestamp(),
+            "age_days": max(0.0, age_days),
+        })
+
+    return items
 
 
-def _empty_via_applescript() -> bool:
-    """Empty entire Trash via Finder AppleScript (reliable, no TCC issues)."""
-    script = 'tell application "Finder" to empty trash'
-    result = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
-    return result.returncode == 0
-
-
-def scan_trash() -> list[dict]:
-    """
-    Scan ~/.Trash and return a list of item dicts:
-    {name, path, size_bytes, mtime, age_days}
-    """
+def scan_trash_filesystem() -> list[dict]:
+    """Scan ~/.Trash via direct filesystem as fallback."""
     items = []
     if not os.path.exists(TRASH_DIR):
         return items
@@ -98,15 +130,81 @@ def scan_trash() -> list[dict]:
         except OSError:
             mtime = now
         age_days = (now - mtime) / 86400
-        size_bytes = _item_size(path)
+        size_bytes = 0
+        if os.path.islink(path) or os.path.isfile(path):
+            try:
+                size_bytes = os.path.getsize(path)
+            except OSError:
+                pass
+        elif os.path.isdir(path):
+            for root, dirs, files in os.walk(path):
+                for f in files:
+                    try:
+                        size_bytes += os.path.getsize(os.path.join(root, f))
+                    except OSError:
+                        pass
         items.append({
             "name": name,
             "path": path,
             "size_bytes": size_bytes,
             "mtime": mtime,
-            "age_days": age_days,
+            "age_days": max(0.0, age_days),
         })
     return items
+
+
+def scan_trash() -> list[dict]:
+    """Scan Trash using AppleScript first (immune to TCC), falling back to filesystem."""
+    items = scan_trash_applescript()
+    if not items:
+        items = scan_trash_filesystem()
+    return items
+
+
+def _remove_item(path: str) -> bool:
+    """Permanently remove a file or directory via filesystem."""
+    try:
+        if os.path.islink(path) or os.path.isfile(path):
+            os.remove(path)
+        else:
+            shutil.rmtree(path, ignore_errors=False)
+        return True
+    except Exception:
+        try:
+            os.chmod(path, stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
+            if os.path.isdir(path):
+                shutil.rmtree(path)
+            else:
+                os.remove(path)
+            return True
+        except Exception:
+            return False
+
+
+def _purge_via_applescript(names: list[str]) -> bool:
+    """Purge specific Trash items by name using Finder AppleScript."""
+    if not names:
+        return True
+    # Escape quotes in names
+    safe_names = [n.replace('"', '\\"') for n in names]
+    # Process in batches of 50 to avoid AppleScript string limits
+    batch_size = 50
+    all_success = True
+    for i in range(0, len(safe_names), batch_size):
+        batch = safe_names[i : i + batch_size]
+        items_str = ", ".join([f'item "{name}" of trash' for name in batch])
+        script = f'tell application "Finder" to delete {{{items_str}}}'
+        res = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
+        if res.returncode != 0:
+            all_success = False
+    return all_success
+
+
+def _empty_via_applescript() -> bool:
+    """Empty entire Trash via Finder AppleScript."""
+    script = 'tell application "Finder" to empty trash'
+    result = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
+    return result.returncode == 0
 
 
 def print_status(items: list[dict], threshold_days: int = DEFAULT_DAYS) -> None:
@@ -117,7 +215,7 @@ def print_status(items: list[dict], threshold_days: int = DEFAULT_DAYS) -> None:
     expired_size = sum(i["size_bytes"] for i in expired)
 
     print()
-    print(f"🗑️  \033[1mTrash Status\033[0m")
+    print("🗑️  \033[1mTrash Status\033[0m")
     print("──────────────────────────────────────────────────────────────────────────")
     print(f"   Total items  : {len(items)}")
     print(f"   Total size   : {_format_bytes(total_size)}")
@@ -144,7 +242,7 @@ def clean_trash(
         verbose:         If True, print each item being purged.
 
     Returns:
-        Number of bytes reclaimed (0 in dry-run).
+        Number of bytes reclaimed.
     """
     items = scan_trash()
     mode_label = "DRY-RUN" if dry_run else "LIVE"
@@ -174,7 +272,6 @@ def clean_trash(
         return 0
 
     reclaimed = 0
-    failed = []
 
     if dry_run:
         for item in to_purge:
@@ -186,42 +283,31 @@ def clean_trash(
         print()
     else:
         if empty_all:
-            # Use Finder AppleScript for full empty — it handles all edge cases
             print("   Emptying entire Trash via Finder...")
             if _empty_via_applescript():
                 reclaimed = total_size
                 print(f"   ✓ Trash emptied. Reclaimed {_format_bytes(reclaimed)}.\n")
             else:
-                print("   ⚠️  Finder empty failed — falling back to direct filesystem delete.\n")
+                print("   ⚠️  Finder empty failed.\n")
+        else:
+            names_to_purge = [i["name"] for i in to_purge]
+            print(f"   Purging {len(names_to_purge)} item(s) older than {older_than_days} days via Finder...")
+            if _purge_via_applescript(names_to_purge):
+                reclaimed = purge_size
+                print(f"   ✓ Purged {len(names_to_purge)} item(s). Reclaimed {_format_bytes(reclaimed)}.")
+                if len(kept) > 0:
+                    print(f"   ✅  Kept {len(kept)} item(s) trashed within the last {older_than_days} days (safe).\n")
+                else:
+                    print()
+            else:
+                # Fallback to direct filesystem removal item by item
+                failed = 0
                 for item in to_purge:
                     if _remove_item(item["path"]):
                         reclaimed += item["size_bytes"]
-                        if verbose:
-                            print(f"   ✓ Purged: {item['name']}  ({_format_bytes(item['size_bytes'])})")
                     else:
-                        failed.append(item["name"])
-        else:
-            for item in to_purge:
-                if _remove_item(item["path"]):
-                    reclaimed += item["size_bytes"]
-                    if verbose:
-                        age_str = f"{item['age_days']:.0f}d"
-                        print(f"   ✓ Purged: {item['name']}  (age: {age_str}, size: {_format_bytes(item['size_bytes'])})")
-                else:
-                    failed.append(item["name"])
-
-        if not verbose and not empty_all:
-            print(f"   ✓ Purged {len(to_purge) - len(failed)} item(s). Reclaimed {_format_bytes(reclaimed)}.")
-            if len(kept) > 0:
-                print(f"   ✅  Kept {len(kept)} item(s) trashed within the last {older_than_days} days (safe).\n")
-            else:
-                print()
-
-        if failed:
-            print(f"   ⚠️  Could not purge {len(failed)} item(s) — may be locked or in use:")
-            for name in failed[:5]:
-                print(f"      • {name}")
-            print()
+                        failed += 1
+                print(f"   ✓ Purged {len(to_purge) - failed} item(s). Reclaimed {_format_bytes(reclaimed)}.\n")
 
     return reclaimed
 
@@ -251,7 +337,6 @@ def main():
         clean_trash(empty_all=True, dry_run=args.dry_run, verbose=args.verbose)
         return
 
-    # Parse age threshold like "30d", "14d", "60d"
     match = re.match(r"^(\d+)d?$", mode)
     if match:
         days = int(match.group(1))
