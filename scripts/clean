@@ -2,12 +2,13 @@
 """
 Clean - Unified Mac Housekeeping CLI & Alfred Trigger
 ------------------------------------------------------
-Orchestrates screenshot, download, cache, and clipboard URL housekeeping.
+Orchestrates screenshot, download, desktop, cache, and clipboard URL housekeeping.
 
 Usage:
   clean                 Run standard file housekeeping (Screenshots + Downloads)
   clean screenshots     Run only screenshot housekeeping
   clean downloads       Run only downloads housekeeping
+  clean desktop         Run only desktop housekeeping
   clean deep / --deep   Run Screenshots + Downloads + Safe System Cache Reclaimer
   clean cache           Run only the safe system cache reclaimer
   clean url [link]      Strip tracking parameters from copied clipboard URL or provided link
@@ -29,6 +30,7 @@ if SCRIPTS_DIR not in sys.path:
 
 from screenshot_housekeeping import organize_screenshots
 from downloads_housekeeping import organize_downloads
+from desktop_housekeeping import organize_desktop
 from system_cache_cleaner import clean_system_caches, format_bytes
 from url_cleaner import clean_clipboard_url
 
@@ -66,6 +68,14 @@ def output_alfred_filter(query: str = ""):
             "subtitle": "Organize loose downloads into monthly archives and purge installers",
             "arg": "downloads",
             "autocomplete": "downloads",
+            "valid": True,
+        },
+        {
+            "uid": "clean-desktop",
+            "title": "Clean Desktop",
+            "subtitle": "Sweep loose desktop files into monthly archive folder",
+            "arg": "desktop",
+            "autocomplete": "desktop",
             "valid": True,
         },
         {
@@ -116,7 +126,7 @@ def main():
         "target",
         nargs="?",
         default="all",
-        help="Target to clean: 'all' (default), 'screenshots', 'downloads', 'cache', 'deep', 'url', or a direct URL",
+        help="Target to clean: 'all' (default), 'screenshots', 'downloads', 'desktop', 'cache', 'deep', 'url', or a direct URL",
     )
     parser.add_argument(
         "extra_args",
@@ -236,7 +246,21 @@ def main():
             print(f"   \033[1;31mError organizing downloads:\033[0m {e}")
             has_errors = True
 
-    # 3. Safe System Caches (ONLY run if explicitly requested via 'deep' or 'cache')
+    # 3. Desktop (run for 'desktop')
+    if target == "desktop":
+        print("\033[1;34m🖥️ Cleaning Desktop...\033[0m")
+        try:
+            moved_count = organize_desktop(
+                desktop_dir="~/Desktop",
+                dry_run=args.dry_run,
+                verbose=args.verbose,
+            )
+            summary_messages.append(f"Desktop: {moved_count} items organized")
+        except Exception as e:
+            print(f"   \033[1;31mError organizing desktop:\033[0m {e}")
+            has_errors = True
+
+    # 4. Safe System Caches (ONLY run if explicitly requested via 'deep' or 'cache')
     if target in ("deep", "cache") or args.deep:
         print("\033[1;34m[3/3] 🚀 Reclaiming System & Developer Caches...\033[0m")
         try:
@@ -260,7 +284,7 @@ def main():
         print("\033[1;32m✨ All clean!\033[0m\n")
         if args.notify:
             notif_msg = " & ".join(summary_messages) if summary_messages else "Done."
-            target_label = f" ({target.capitalize()})" if target in ("screenshots", "downloads", "deep", "cache") else ""
+            target_label = f" ({target.capitalize()})" if target in ("screenshots", "downloads", "desktop", "deep", "cache") else ""
             send_macos_notification(f"Mac Housekeeping Complete{target_label}", "Tidied up successfully", notif_msg)
 
 
