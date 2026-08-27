@@ -162,35 +162,36 @@ def scan_trash() -> list[dict]:
     return items
 
 
+def _onerror_chmod(func, path, excinfo):
+    """Error handler for shutil.rmtree: chmod the file then retry (fixes app bundle CodeResources)."""
+    try:
+        os.chmod(path, stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
+        func(path)
+    except Exception:
+        pass
+
+
 def _silent_purge_item(item_name: str) -> bool:
     """
-    Silently unlock and permanently delete a Trash item without Finder GUI dialog popups.
+    Permanently delete a Trash item. Uses direct subprocess calls to /bin/rm
+    so the child process properly inherits Terminal's Full Disk Access TCC grant.
+    Python's in-process os.remove() does NOT inherit Terminal's FDA in macOS Sonoma;
+    a direct /bin/rm subprocess does.
     """
-    quoted = shlex.quote(item_name)
-
-    # 1. Direct python removal if accessible
     item_path = os.path.join(TRASH_DIR, item_name)
-    if os.path.exists(item_path):
-        try:
-            if os.path.islink(item_path) or os.path.isfile(item_path):
-                os.remove(item_path)
-                return True
-            elif os.path.isdir(item_path):
-                shutil.rmtree(item_path, ignore_errors=False)
-                return True
-        except Exception:
-            pass
 
-    # 2. Quiet shell execution with chflags unlock
-    shell_cmd = f"chflags -R nouchg ~/.Trash/{quoted} 2>/dev/null; rm -rf ~/.Trash/{quoted}"
-    res = subprocess.run(["bash", "-c", shell_cmd], capture_output=True, text=True)
+    if not os.path.exists(item_path):
+        return True  # Already gone
 
-    if res.returncode == 0 and not os.path.exists(item_path):
-        return True
+    # Step 1: Clear user-immutable flag directly (not via bash intermediary)
+    subprocess.run(["/usr/bin/chflags", "-R", "nouchg", item_path], capture_output=True)
 
-    # 3. Fallback to osascript do shell script
-    as_cmd = f'do shell script "chflags -R nouchg ~/.Trash/{quoted} 2>/dev/null; rm -rf ~/.Trash/{quoted}"'
-    res_as = subprocess.run(["osascript", "-e", as_cmd], capture_output=True, text=True)
+    # Step 2: For app bundles, chmod internal read-only files first (fixes Errno 13 CodeResources)
+    if os.path.isdir(item_path):
+        subprocess.run(["/bin/chmod", "-R", "u+rwX", item_path], capture_output=True)
+
+    # Step 3: Direct /bin/rm call (one subprocess hop from Terminal — inherits FDA correctly)
+    res = subprocess.run(["/bin/rm", "-rf", item_path], capture_output=True, text=True)
 
     return not os.path.exists(item_path)
 
