@@ -19,18 +19,45 @@ echo "────────────────────────�
 echo "📦 Making scripts executable..."
 chmod +x "$SCRIPTS_DIR"/*
 
-# 2. Add to PATH in ~/.zshrc
-ZSHRC="$HOME/.zshrc"
+# 2. Add to PATH in the active shell profile (zsh, bash, or fish)
 PATH_LINE='export PATH="$HOME/utilities/scripts:$PATH"'
+SHELL_NAME="$(basename "$SHELL")"
+PROFILE_UPDATED=""
 
-if [ -f "$ZSHRC" ] && grep -Fq "$PATH_LINE" "$ZSHRC"; then
-    echo "✓ Scripts path already configured in ~/.zshrc"
-else
-    echo "✓ Adding scripts directory to PATH in ~/.zshrc..."
-    echo "" >> "$ZSHRC"
-    echo "# Mac Utilities Toolkit" >> "$ZSHRC"
-    echo "$PATH_LINE" >> "$ZSHRC"
+if [ "$SHELL_NAME" = "zsh" ] || [ -f "$HOME/.zshrc" ]; then
+    TARGET_RC="$HOME/.zshrc"
+    if ! grep -Fq "$PATH_LINE" "$TARGET_RC" 2>/dev/null; then
+        echo "" >> "$TARGET_RC"
+        echo "# Mac Utilities Toolkit" >> "$TARGET_RC"
+        echo "$PATH_LINE" >> "$TARGET_RC"
+    fi
+    PROFILE_UPDATED="~/.zshrc"
 fi
+
+if [ "$SHELL_NAME" = "bash" ] || [ -f "$HOME/.bash_profile" ] || [ -f "$HOME/.bashrc" ]; then
+    TARGET_BASH="$HOME/.bash_profile"
+    [ ! -f "$TARGET_BASH" ] && [ -f "$HOME/.bashrc" ] && TARGET_BASH="$HOME/.bashrc"
+    if ! grep -Fq "$PATH_LINE" "$TARGET_BASH" 2>/dev/null; then
+        echo "" >> "$TARGET_BASH"
+        echo "# Mac Utilities Toolkit" >> "$TARGET_BASH"
+        echo "$PATH_LINE" >> "$TARGET_BASH"
+    fi
+    PROFILE_UPDATED="${PROFILE_UPDATED:+$PROFILE_UPDATED, }$(basename "$TARGET_BASH")"
+fi
+
+if [ "$SHELL_NAME" = "fish" ]; then
+    FISH_CONF_DIR="$HOME/.config/fish"
+    mkdir -p "$FISH_CONF_DIR"
+    FISH_LINE='set -gx PATH $HOME/utilities/scripts $PATH'
+    if ! grep -Fq "$FISH_LINE" "$FISH_CONF_DIR/config.fish" 2>/dev/null; then
+        echo "" >> "$FISH_CONF_DIR/config.fish"
+        echo "# Mac Utilities Toolkit" >> "$FISH_CONF_DIR/config.fish"
+        echo "$FISH_LINE" >> "$FISH_CONF_DIR/config.fish"
+    fi
+    PROFILE_UPDATED="${PROFILE_UPDATED:+$PROFILE_UPDATED, }~/.config/fish/config.fish"
+fi
+
+echo "✓ Configured PATH in: ${PROFILE_UPDATED:-~/.zshrc}"
 
 # 3. Setup and Load LaunchAgents (Automated Nightly Housekeeping at 23:59)
 echo "⏰ Configuring automated daily LaunchAgents..."
@@ -38,11 +65,8 @@ mkdir -p "$USER_LAUNCHAGENTS"
 mkdir -p "$HOME/Library/Logs"
 
 # Unload any legacy or previous instances
-launchctl unload "$USER_LAUNCHAGENTS/com.gromitski.screenshot-housekeeping.plist" 2>/dev/null || true
-launchctl unload "$USER_LAUNCHAGENTS/com.gromitski.downloads-housekeeping.plist" 2>/dev/null || true
 launchctl unload "$USER_LAUNCHAGENTS/com.mac-utilities.screenshot-housekeeping.plist" 2>/dev/null || true
 launchctl unload "$USER_LAUNCHAGENTS/com.mac-utilities.downloads-housekeeping.plist" 2>/dev/null || true
-rm -f "$USER_LAUNCHAGENTS/com.gromitski.*.plist"
 
 # Generate and install machine-specific plists from templates
 sed "s|__HOME__|$HOME|g" "$LAUNCHD_DIR/com.mac-utilities.screenshot-housekeeping.plist" > "$USER_LAUNCHAGENTS/com.mac-utilities.screenshot-housekeeping.plist"
@@ -64,7 +88,13 @@ echo "────────────────────────�
 echo "✨ Installation complete!"
 echo ""
 echo "To start using immediately, reload your shell:"
-echo "  source ~/.zshrc"
+if [ "$SHELL_NAME" = "fish" ]; then
+    echo "  source ~/.config/fish/config.fish"
+elif [ "$SHELL_NAME" = "bash" ]; then
+    echo "  source ~/.bash_profile"
+else
+    echo "  source ~/.zshrc"
+fi
 echo ""
 echo "Available CLI Commands:"
 echo "  • clean               (Clean screenshots & downloads on-demand)"
@@ -74,6 +104,6 @@ echo "  • git-audit           (Scan uncommitted/unpushed Git repositories)"
 echo "  • localserver         (Serve local directory over Wi-Fi with QR code)"
 echo "  • awake [30m|1h|off]  (Inhibit sleep and display dimming)"
 echo ""
-echo "Optional Alfred Workflow:"
+echo "Optional Alfred Workflow (for Alfred users):"
 echo "  Double-click: $REPO_DIR/alfred/Clean.alfredworkflow"
 echo ""
